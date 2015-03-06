@@ -104,13 +104,13 @@ import org.pentaho.platform.repository2.unified.fs.FileSystemBackedUnifiedReposi
 import org.pentaho.test.platform.engine.core.MicroPlatform;
 import org.pentaho.test.platform.engine.security.MockSecurityHelper;
 import org.springframework.dao.DataAccessException;
-import org.springframework.security.GrantedAuthority;
-import org.springframework.security.GrantedAuthorityImpl;
-import org.springframework.security.context.SecurityContextHolder;
-import org.springframework.security.userdetails.User;
-import org.springframework.security.userdetails.UserDetails;
-import org.springframework.security.userdetails.UserDetailsService;
-import org.springframework.security.userdetails.UsernameNotFoundException;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 
 import com.sun.jersey.core.header.FormDataContentDisposition;
 
@@ -453,11 +453,11 @@ public class DatasourceResourceTest {
     @Override
     public UserDetails loadUserByUsername( String name ) throws UsernameNotFoundException, DataAccessException {
 
-      GrantedAuthority[] auths = new GrantedAuthority[2];
-      auths[0] = new GrantedAuthorityImpl( "Authenticated" );
-      auths[1] = new GrantedAuthorityImpl( "Administrator" );
-
-      UserDetails user = new User( name, "password", true, true, true, true, auths );
+      List<GrantedAuthority>  auths = new ArrayList<GrantedAuthority>(2);
+      auths.add( new SimpleGrantedAuthority("Authenticated") );
+      auths.add( new SimpleGrantedAuthority("Administrator") );
+      
+      UserDetails user = new User(name, "password", true, true, true, true, auths);
 
       return user;
     }
