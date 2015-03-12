@@ -25,9 +25,9 @@
   <bean class="org.pentaho.platform.dataaccess.datasource.api.resources.MetadataResource"/>
   <bean class="org.pentaho.platform.dataaccess.datasource.api.resources.JDBCDatasourceResource"/>
   <bean class="org.pentaho.platform.dataaccess.datasource.wizard.service.impl.DatabaseDialectService"/>
-  <bean class="org.pentaho.platform.dataaccess.datasource.wizard.service.impl.PentahoJAXBContextResolver"/>
+  <bean class="org.pentaho.platform.dataaccess.datasource.wizard.service.impl.PentahoJAXBContextResolver" scope="singleton"/>
   <bean class="org.pentaho.platform.dataaccess.datasource.wizard.service.impl.DataAccessPermissionResource"/>
-  <bean class="org.pentaho.platform.dataaccess.datasource.wizard.service.impl.DatabaseConnectionReaderWriter"/>
+  <bean class="org.pentaho.platform.dataaccess.datasource.wizard.service.impl.DatabaseConnectionReaderWriter" scope="singleton"/>
   <bean class="org.pentaho.platform.dataaccess.datasource.wizard.service.impl.DatabaseConnectionListReaderWriter"/>
   <bean class="org.pentaho.platform.dataaccess.datasource.wizard.service.impl.DatabaseTypeReaderWriter"/>
   <bean class="org.pentaho.platform.dataaccess.datasource.wizard.service.impl.DatabaseTypesListReaderWriter"/>
