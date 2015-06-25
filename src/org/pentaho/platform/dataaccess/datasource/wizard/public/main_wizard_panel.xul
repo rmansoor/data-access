@@ -3,7 +3,7 @@
 <window xmlns="http://www.pentaho.org/there.is.only.xul" xmlns:pen="http://www.pentaho.org/2008/xul"
         id="datasourceEditorWindow" title="${datasourceEditorDialog.TITLE}" orient="vertical" height="700" width="900">
   <dialog xmlns="http://www.pentaho.org/there.is.only.xul" xmlns:pen="http://www.pentaho.org/2008/xul"
-          id="main_wizard_window" width="900" height="600" title="${WIZARD_TITLE}" onload="" resizable="false"
+          id="main_wizard_window" width="900" height="700" title="${WIZARD_TITLE}" onload="" resizable="false"
           padding="0" spacing="0"
           buttons="accept,cancel,extra1,extra2"
           pen:acceptbuttonalign="right"
@@ -210,7 +210,7 @@
           <!--  ###############################################################################  -->
           <hbox>
             <vbox>
-              <label value="${multitable.SELECT_JOIN_TABLES}" tooltiptext=""/>
+              <label value="${multitable.SELECT_JOIN_TABLES}" tooltiptext="" multiline="true"/>
             </vbox>
           </hbox>
           <hbox>
@@ -311,7 +311,7 @@
           <!--  ###############################################################################  -->
           <hbox>
             <vbox>
-              <label value="${multitable.DEFINE_JOIN_TABLES}" tooltiptext=""/>
+              <label value="${multitable.DEFINE_JOIN_TABLES}" tooltiptext="" multiline="true"/>
             </vbox>
           </hbox>
           <hbox>
@@ -603,7 +603,7 @@
       </vbox>
       <spacer height="10"/>
       <vbox id="showModelerCheckboxHider" height="140">
-        <groupbox flex="1" height="132">
+        <groupbox flex="1" height="155">
           <caption label="${summaryDialog.note}"/>
           <label id="summaryDialogDescription" value="${summaryDialog.description}" multiline="true"/>
           <radiogroup id="modelerDecision" flex="1" height="53">

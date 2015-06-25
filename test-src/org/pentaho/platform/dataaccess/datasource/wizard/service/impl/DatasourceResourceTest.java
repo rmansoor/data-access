@@ -1,7 +1,24 @@
+/*!
+ * This program is free software; you can redistribute it and/or modify it under the
+ * terms of the GNU Lesser General Public License, version 2.1 as published by the Free Software
+ * Foundation.
+ *
+ * You should have received a copy of the GNU Lesser General Public License along with this
+ * program; if not, you can obtain a copy at http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html
+ * or from the Free Software Foundation, Inc.,
+ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+ * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU Lesser General Public License for more details.
+ *
+ * Copyright (c) 2002-2015 Pentaho Corporation..  All rights reserved.
+ */
+
 package org.pentaho.platform.dataaccess.datasource.wizard.service.impl;
 
-import static org.mockito.Matchers.anyString;
 import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -27,7 +44,10 @@ import org.hamcrest.Matcher;
 import org.hamcrest.TypeSafeMatcher;
 import org.jmock.Expectations;
 import org.jmock.Mockery;
-import org.junit.*;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.BeforeClass;
+import org.junit.Test;
 import org.pentaho.agilebi.modeler.ModelerWorkspace;
 import org.pentaho.agilebi.modeler.gwt.GwtModelerWorkspaceHelper;
 import org.pentaho.agilebi.modeler.util.TableModelerSource;
@@ -46,13 +66,16 @@ import org.pentaho.platform.api.engine.IPluginResourceLoader;
 import org.pentaho.platform.api.engine.ISecurityHelper;
 import org.pentaho.platform.api.engine.ISolutionEngine;
 import org.pentaho.platform.api.engine.IUserRoleListService;
+import org.pentaho.platform.api.mimetype.IMimeType;
 import org.pentaho.platform.api.repository.IClientRepositoryPathsStrategy;
 import org.pentaho.platform.api.repository.datasource.DatasourceMgmtServiceException;
 import org.pentaho.platform.api.repository.datasource.DuplicateDatasourceException;
 import org.pentaho.platform.api.repository.datasource.IDatasourceMgmtService;
 import org.pentaho.platform.api.repository.datasource.NonExistingDatasourceException;
+import org.pentaho.platform.api.repository2.unified.IPlatformImportBundle;
 import org.pentaho.platform.api.repository2.unified.IUnifiedRepository;
 import org.pentaho.platform.api.repository2.unified.RepositoryFile;
+import org.pentaho.platform.core.mimetype.MimeType;
 import org.pentaho.platform.dataaccess.datasource.api.AnalysisService;
 import org.pentaho.platform.dataaccess.datasource.api.resources.DataSourceWizardResource;
 import org.pentaho.platform.engine.core.system.PentahoSessionHolder;
@@ -67,13 +90,11 @@ import org.pentaho.platform.plugin.action.mondrian.mapper.MondrianOneToOneUserRo
 import org.pentaho.platform.plugin.services.connections.mondrian.MDXConnection;
 import org.pentaho.platform.plugin.services.connections.mondrian.MDXOlap4jConnection;
 import org.pentaho.platform.plugin.services.connections.sql.SQLConnection;
-import org.pentaho.platform.plugin.services.importer.IPlatformImportBundle;
 import org.pentaho.platform.plugin.services.importer.IPlatformImporter;
 import org.pentaho.platform.plugin.services.importer.MetadataImportHandler;
 import org.pentaho.platform.plugin.services.importer.MondrianImportHandler;
 import org.pentaho.platform.plugin.services.importer.PlatformImportException;
 import org.pentaho.platform.plugin.services.importer.RepositoryFileImportBundle;
-import org.pentaho.platform.plugin.services.importer.mimeType.MimeType;
 import org.pentaho.platform.plugin.services.metadata.IPentahoMetadataDomainRepositoryImporter;
 import org.pentaho.platform.plugin.services.metadata.PentahoMetadataDomainRepository;
 import org.pentaho.platform.plugin.services.pluginmgr.PluginClassLoader;
@@ -167,7 +188,7 @@ public class DatasourceResourceTest {
   @Test
   public void testMondrianImportExport() throws Exception {
     final String domainName = "SalesData";
-    List<MimeType> mimeTypeList = new ArrayList<MimeType>();
+    List<IMimeType> mimeTypeList = new ArrayList<IMimeType>();
     mimeTypeList.add( new MimeType( "Mondrian", "mondrian.xml" ) );
     System.setProperty( "org.osjava.sj.root", "test-res/solution1/system/simple-jndi" ); //$NON-NLS-1$ //$NON-NLS-2$
 
@@ -221,7 +242,7 @@ public class DatasourceResourceTest {
 
   @Test
   public void testMetadataImportExport() throws PlatformInitializationException, IOException, PlatformImportException {
-    List<MimeType> mimeTypeList = new ArrayList<MimeType>();
+    List<IMimeType> mimeTypeList = new ArrayList<IMimeType>();
     mimeTypeList.add( new MimeType("Metadata", ".xmi") );
 
     File metadata = new File( "test-res/dsw/testData/metadata.xmi" );
@@ -273,7 +294,7 @@ public class DatasourceResourceTest {
     } );
     FileInputStream in = new FileInputStream( new File( new File( "test-res" ), "SampleDataOlap.xmi" ) );
     try {
-      Response resp = service.publishDsw( "AModel.xmi", in, true, false );
+      Response resp = service.publishDsw( "AModel.xmi", in, true, false, null );
       Assert.assertEquals(
           Response.Status.Family.SUCCESSFUL,
           Response.Status.fromStatusCode( resp.getStatus() ).getFamily() );
@@ -306,7 +327,7 @@ public class DatasourceResourceTest {
     FileInputStream in = new FileInputStream( filePath );
     try {
       service.putMondrianSchema( in, schemaFileInfo, null, null, null, false, false,
-          "Datasource=SampleData;overwrite=false" );
+          "Datasource=SampleData;overwrite=false", null );
 
       mockery.assertIsSatisfied();
     } finally {
