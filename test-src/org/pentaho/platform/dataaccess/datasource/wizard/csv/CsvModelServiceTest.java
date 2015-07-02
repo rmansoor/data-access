@@ -19,7 +19,10 @@ package org.pentaho.platform.dataaccess.datasource.wizard.csv;
 
 import java.io.File;
 import java.util.Arrays;
+import java.util.Locale;
 
+import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.pentaho.gwt.widgets.client.utils.string.StringTokenizer;
 import org.pentaho.metadata.model.concept.types.DataType;
@@ -48,6 +51,11 @@ public class CsvModelServiceTest extends BaseTest {
       System.out.println("File does not exist returning " + ALT_SOLUTION_PATH); //$NON-NLS-1$
       return ALT_SOLUTION_PATH;
     }
+  }
+
+  @Override public void setUp() {
+    super.setUp();
+    Locale.setDefault( new Locale( "en", "US" ) );
   }
 
   @SuppressWarnings("nls")
