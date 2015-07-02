@@ -22,6 +22,7 @@ import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.Date;
+import java.util.Locale;
 import java.util.Map;
 
 import org.apache.commons.lang.ArrayUtils;
@@ -75,7 +76,12 @@ public class CsvTransformGeneratorTest extends BaseTest {
     }
   }
 
-  public void testGoodTransform() throws Exception {    
+  @Override public void setUp() {
+    super.setUp();
+    Locale.setDefault( new Locale( "en", "US" ) );
+  }
+
+  public void testGoodTransform() throws Exception {
     IPentahoSession session = new StandaloneSession("test");
     KettleSystemListener.environmentInit(session);
     String KETTLE_EMPTY_STRING_DIFFERS_FROM_NULL = System.getProperty("KETTLE_EMPTY_STRING_DIFFERS_FROM_NULL", "N");

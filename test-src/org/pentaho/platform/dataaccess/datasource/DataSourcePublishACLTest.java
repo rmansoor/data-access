@@ -43,7 +43,6 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.pentaho.metadata.repository.IMetadataDomainRepository;
-import org.pentaho.platform.api.engine.IAclVoter;
 import org.pentaho.platform.api.engine.ICacheManager;
 import org.pentaho.platform.api.engine.IPluginResourceLoader;
 import org.pentaho.platform.api.engine.ISystemConfig;
@@ -76,7 +75,7 @@ import org.pentaho.test.platform.engine.core.MicroPlatform;
 import org.springframework.beans.BeansException;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
-import org.springframework.security.context.SecurityContextHolder;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
@@ -199,7 +198,6 @@ public class DataSourcePublishACLTest extends JerseyTest implements ApplicationC
     mp.defineInstance( IPluginResourceLoader.class, pluginResourceLoader );
     mp.define( IDataAccessPermissionHandler.class, SimpleDataAccessPermissionHandler.class );
     mp.define( IDataAccessViewPermissionHandler.class, SimpleDataAccessViewPermissionHandler.class );
-    mp.defineInstance( IAclVoter.class, applicationContext.getBean( "IAclVoter" ) );
 
     SecurityContextHolder.setStrategyName( SecurityContextHolder.MODE_GLOBAL );
     super.setUp();

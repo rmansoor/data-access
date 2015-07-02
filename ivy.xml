@@ -29,12 +29,16 @@
 
     <dependency org="org.safehaus.jug" name="jug-lgpl" rev="2.0.0"/>
     <dependency org="org.springframework.security" name="spring-security-core" rev="3.2.5.RELEASE" transitive="false"/>
+    <dependency org="org.springframework" name="spring-tx" rev="4.1.5.RELEASE" transitive="false"/>
+    <dependency org="org.springframework" name="spring-context" rev="4.1.5.RELEASE" transitive="false"/>
+    <dependency org="org.springframework" name="spring-beans" rev="4.1.5.RELEASE" transitive="false"/>
+    <dependency org="org.springframework" name="spring-core" rev="4.1.5.RELEASE" transitive="false"/>
     <!--  will not properly pull from ibiblio maven2. needs classifier of 'lgpl' -->
     <dependency org="commons-httpclient" name="commons-httpclient" rev="3.0.1" transitive="false"/>
     <dependency org="commons-vfs" name="commons-vfs" rev="1.0" transitive="false"/>
-    <dependency org="commons-digester" name="commons-digester" rev="1.8" transitive="false"/>
+    <dependency org= "commons-digester" name="commons-digester" rev="1.8" transitive="false"/>
     <dependency org="commons-fileupload" name="commons-fileupload" rev="1.2.1"/>
-    <dependency org="commons-io" name="commons-io" rev="2.1"/>
+    <dependency org="commons-io" name="commons-io" rev="2.1" transitive="false"/>
     <dependency org="commons-lang" name="commons-lang" rev="2.4"/>
     <dependency org="joda-time" name="joda-time" rev="1.6" transitive="false" conf="test->default"/>
     <dependency org="commons-math" name="commons-math" rev="1.1" transitive="false" conf="test->default"/>
@@ -117,9 +121,14 @@
     <dependency org="org.springframework" name="spring-test" rev="4.1.5.RELEASE" conf="test->default"/>
     <dependency org="net.sf.saxon" name="saxon" rev="9.1.0.8" transitive="false" conf="test->default"/>
     <dependency org="net.sf.saxon" name="saxon-dom" rev="9.1.0.8" transitive="false" conf="test->default"/>
-    <dependency org="junit" name="junit" rev="4.4" conf="test->default"/>
+    <dependency org="junit" name="junit" rev="4.11" conf="test->default"/>
     <dependency org="org.jmock" name="jmock-junit4" rev="2.5.1" conf="test->default"/>
-    <dependency org="org.apache.jackrabbit"    name="jackrabbit-core"            rev="2.4.5" conf="test->default" transitive="false"/>
+    <dependency org="org.apache.jackrabbit"    name="jackrabbit-core"            rev="2.10.0" conf="test->default"/>
+    <dependency org="org.apache.jackrabbit" name="jackrabbit-data" rev="2.10.0" conf="test->default" transitive="false">
+      <artifact name="jackrabbit-data" type="jar"/>
+    </dependency>
+
+    <dependency org="javax.jcr"        			name="jcr"                        rev="2.0"        transitive="false"/>
     <dependency org="org.springframework"          name="se-jcr"                 rev="0.9"           transitive="false" conf="test->default"/>
     <dependency org="org.springframework"          name="spring-beans"           rev="4.1.5.RELEASE"         transitive="false" conf="test->default"/>
     <dependency org="org.springframework"          name="spring-context"         rev="4.1.5.RELEASE"         transitive="false" conf="test->default"/>
@@ -130,7 +139,6 @@
     <dependency org="org.springframework"          name="spring-webmvc"          rev="4.1.5.RELEASE"         transitive="false" conf="test->default"/>
     <dependency org="geronimo-spec"            name="geronimo-spec-jta"            rev="1.0.1B-rc4" transitive="false" conf="test->default"/>
     <dependency org="geronimo-spec"            name="geronimo-spec-j2ee-connector" rev="1.5-rc4"    transitive="false" conf="test->default"/>
-    <dependency org="javax.jcr"                name="jcr"                          rev="1.0"        transitive="false" conf="test->default"/>
     <dependency org="javax.transaction"        name="jta"                          rev="1.1"        transitive="false" conf="test->default"/>
     <dependency org="aopalliance"              name="aopalliance"                  rev="1.0"        transitive="false" conf="test->default"/>
     <dependency org="concurrent"               name="concurrent"                   rev="1.3.4"      transitive="false" conf="test->default"/>
@@ -151,8 +159,16 @@
     <dependency org="com.sun.jersey.contribs"               name="jersey-multipart"               rev="1.5" conf="test->default"/>
 
     <dependency org="commons-codec" name="commons-codec" rev="1.3" transitive="false" conf="test->default"/>
-    <dependency org="org.springframework" name="spring" rev="2.5.6" transitive="false"/>
-    <dependency org="spring" name="spring-mock" rev="1.0.2" transitive="false"/>
+
+    <dependency org="org.apache.felix" name="org.apache.felix.main" rev="4.2.1" conf="test->default"/>
+    <dependency org="org.springframework" name="spring-expression" rev="4.1.5.RELEASE" conf="test->default"/>
+    <dependency org="org.springframework.security" name="spring-security-config" rev="3.2.5.RELEASE" transitive="false" conf="test->default"/>
+    <dependency org="org.springframework" name="spring-aop" rev="4.1.5.RELEASE" transitive="false" conf="test->default"/>
+    <dependency org="org.springframework.webflow"  name="spring-binding"         rev="2.4.1.RELEASE"         transitive="false" conf="test->default"/>
+    <dependency org="commons-dbcp"        name="commons-dbcp"        rev="1.4"   transitive="false" />
+    <dependency org="org.jvnet.jax-ws-commons.spring" name="jaxws-spring" rev="1.8" transitive="false"/>
+    <dependency org="pentaho" name="pentaho-platform-scheduler" rev="${dependency.pentaho-platform.revision}"
+                changing="true" transitive="false" conf="test->default"/>
     <dependency org="org.springframework"      	name="se-jcr"                     rev="0.9" transitive="false" />
     
     <!-- The organization of GWT Widgets can not be varied since we do not create optimized versions of the GWT Widgets -->
@@ -203,16 +219,15 @@
     <dependency org="pentaho" name="simple-jndi" rev="${dependency.pentaho-simple-jndi.revision}" conf="test->default" transitive="false"/>
 
     <!-- jersey -->
-    <dependency org="com.sun.jersey.contribs" name="jersey-multipart" rev="1.5"/>
-    <dependency org="com.sun.jersey.contribs" name="jersey-apache-client" rev="1.5" transitive="false"/>
+    <dependency org="com.sun.jersey.contribs" name="jersey-multipart" rev="1.16"/>
+    <dependency org="com.sun.jersey.contribs" name="jersey-apache-client" rev="1.16" transitive="false"/>
+    <dependency org="com.sun.jersey.contribs" name="jersey-spring" rev="1.16" transitive="false"/>
 
-    <!-- jersey -->
-    <dependency org="com.sun.jersey" name="jersey-core" rev="1.5" transitive="false"/>
-    <dependency org="com.sun.jersey" name="jersey-json" rev="1.5" transitive="false"/>
-    <dependency org="com.sun.jersey.contribs" name="jersey-spring" rev="1.5" transitive="false"/>
-    <dependency org="com.sun.jersey" name="jersey-client" rev="1.5" transitive="false"/>
-    <dependency org="com.sun.jersey" name="jersey-server" rev="1.5" transitive="false"/>
-    <dependency org="javax.ws.rs" name="jsr311-api" rev="1.1.1" transitive="false"/>
+    <dependency org="com.sun.jersey" name="jersey-core" rev="1.16"    transitive="false"/>
+    <dependency org="com.sun.jersey" name="jersey-json" rev="1.16"    transitive="true"/>
+    <dependency org="com.sun.jersey" name="jersey-client" rev="1.16"  transitive="false"/>
+    <dependency org="com.sun.jersey" name="jersey-server" rev="1.16"  transitive="false"/>
+    <dependency org="com.sun.jersey" name="jersey-servlet" rev="1.16" transitive="false"/>
 
     <!-- wadl -->
     <dependency org="com.sun.jersey.contribs" name="wadl-resourcedoc-doclet" rev="1.19" transitive="false" />

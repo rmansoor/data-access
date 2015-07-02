@@ -22,6 +22,7 @@ import java.io.File;
 import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedList;
 import java.util.List;
 
 import junit.framework.Assert;
@@ -85,16 +86,17 @@ import org.pentaho.test.platform.MethodTrackingData;
 import org.pentaho.test.platform.engine.core.MicroPlatform;
 import org.pentaho.test.platform.engine.security.MockSecurityHelper;
 import org.springframework.context.ApplicationContextAware;
-import org.springframework.dao.DataAccessException;
-import org.springframework.security.Authentication;
-import org.springframework.security.GrantedAuthority;
-import org.springframework.security.GrantedAuthorityImpl;
-import org.springframework.security.context.SecurityContextHolder;
-import org.springframework.security.providers.UsernamePasswordAuthenticationToken;
-import org.springframework.security.userdetails.User;
-import org.springframework.security.userdetails.UserDetails;
-import org.springframework.security.userdetails.UserDetailsService;
-import org.springframework.security.userdetails.UsernameNotFoundException;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.GrantedAuthorityImpl;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.mockito.Matchers.anyString;
@@ -167,7 +169,7 @@ public class SerializeMultiTableServiceTest {
     
     
     PentahoSessionHolder.setStrategyName(PentahoSessionHolder.MODE_GLOBAL);
-    SecurityContextHolder.setStrategyName(SecurityContextHolder.MODE_GLOBAL);
+    SecurityContextHolder.setStrategyName( SecurityContextHolder.MODE_GLOBAL );
   }
 
   @Test
@@ -279,9 +281,8 @@ public class SerializeMultiTableServiceTest {
     if (tenantAdmin) {
       authList.add(new GrantedAuthorityImpl(MessageFormat.format(tenantAdminAuthorityNamePattern, tenantId)));
     }
-    GrantedAuthority[] authorities = authList.toArray(new GrantedAuthority[0]);
-    UserDetails userDetails = new User(username, password, true, true, true, true, authorities);
-    Authentication auth = new UsernamePasswordAuthenticationToken(userDetails, password, authorities);
+    UserDetails userDetails = new User(username, password, true, true, true, true, authList);
+    Authentication auth = new UsernamePasswordAuthenticationToken(userDetails, password, authList);
     PentahoSessionHolder.setSession(pentahoSession);
     // this line necessary for Spring Security's MethodSecurityInterceptor
     SecurityContextHolder.getContext().setAuthentication(auth);
@@ -361,15 +362,13 @@ public class SerializeMultiTableServiceTest {
   public static class MockUserDetailService implements UserDetailsService {
 
     @Override
-    public UserDetails loadUserByUsername(String name) throws UsernameNotFoundException, DataAccessException {
+    public UserDetails loadUserByUsername(String name) throws UsernameNotFoundException {
       
-      GrantedAuthority[]  auths = new GrantedAuthority[2];
-      auths[0] = new GrantedAuthorityImpl("Authenticated");
-      auths[1] = new GrantedAuthorityImpl("Administrator");
-      
-      UserDetails user = new User(name, "password", true, true, true, true, auths);
-      
-      return user;
+      List<GrantedAuthority> auths = new LinkedList<GrantedAuthority>();
+      auths.add( new SimpleGrantedAuthority( "Authenticated" ) );
+      auths.add( new SimpleGrantedAuthority( "Administrator" ) );
+
+      return new User(name, "password", true, true, true, true, auths);
     }
     
   }
