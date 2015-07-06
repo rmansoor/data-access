@@ -28,11 +28,11 @@
     </dependency>
 
     <dependency org="org.safehaus.jug" name="jug-lgpl" rev="2.0.0"/>
-    <dependency org="org.springframework.security" name="spring-security-core" rev="3.2.5.RELEASE" transitive="false"/>
-    <dependency org="org.springframework" name="spring-tx" rev="4.1.5.RELEASE" transitive="false"/>
-    <dependency org="org.springframework" name="spring-context" rev="4.1.5.RELEASE" transitive="false"/>
-    <dependency org="org.springframework" name="spring-beans" rev="4.1.5.RELEASE" transitive="false"/>
-    <dependency org="org.springframework" name="spring-core" rev="4.1.5.RELEASE" transitive="false"/>
+    <dependency org="org.springframework.security" name="spring-security-core" rev="${dependency.spring.security.revision}" transitive="false"/>
+    <dependency org="org.springframework" name="spring-tx" rev="${dependency.spring.framework.revision}" transitive="false"/>
+    <dependency org="org.springframework" name="spring-context" rev="${dependency.spring.framework.revision}" transitive="false"/>
+    <dependency org="org.springframework" name="spring-beans" rev="${dependency.spring.framework.revision}" transitive="false"/>
+    <dependency org="org.springframework" name="spring-core" rev="${dependency.spring.framework.revision}" transitive="false"/>
     <!--  will not properly pull from ibiblio maven2. needs classifier of 'lgpl' -->
     <dependency org="commons-httpclient" name="commons-httpclient" rev="3.0.1" transitive="false"/>
     <dependency org="commons-vfs" name="commons-vfs" rev="1.0" transitive="false"/>
@@ -83,7 +83,7 @@
     <dependency org="com.h2database" name="h2" rev="1.0.78" transitive="false" conf="test->default"/>
     <dependency org="org.slf4j" name="slf4j-api" rev="1.7.3" conf="default->default"/>
 
-<!-- 
+<!--
  <dependency org="org.slf4j" name="slf4j-jcl" rev="1.7.3" conf="default->default"/>
  -->
 
@@ -118,7 +118,7 @@
     <dependency org="pentaho" name="pentaho-platform-repository-test" rev="${dependency.pentaho.repository.revision}" changing="true"
                 conf="test->default" transitive="false"/>
 
-    <dependency org="org.springframework" name="spring-test" rev="4.1.5.RELEASE" conf="test->default"/>
+    <dependency org="org.springframework" name="spring-test" rev="${dependency.spring.framework.revision}" conf="test->default"/>
     <dependency org="net.sf.saxon" name="saxon" rev="9.1.0.8" transitive="false" conf="test->default"/>
     <dependency org="net.sf.saxon" name="saxon-dom" rev="9.1.0.8" transitive="false" conf="test->default"/>
     <dependency org="junit" name="junit" rev="4.11" conf="test->default"/>
@@ -130,13 +130,13 @@
 
     <dependency org="javax.jcr"        			name="jcr"                        rev="2.0"        transitive="false"/>
     <dependency org="org.springframework"          name="se-jcr"                 rev="0.9"           transitive="false" conf="test->default"/>
-    <dependency org="org.springframework"          name="spring-beans"           rev="4.1.5.RELEASE"         transitive="false" conf="test->default"/>
-    <dependency org="org.springframework"          name="spring-context"         rev="4.1.5.RELEASE"         transitive="false" conf="test->default"/>
-    <dependency org="org.springframework"          name="spring-context-support" rev="4.1.5.RELEASE"         transitive="false" conf="test->default"/>
-    <dependency org="org.springframework"          name="spring-core"            rev="4.1.5.RELEASE"         transitive="false" conf="test->default"/>
-    <dependency org="org.springframework.security" name="spring-security-core"   rev="3.2.5.RELEASE" transitive="false" conf="test->default"/>
-    <dependency org="org.springframework"          name="spring-web"             rev="4.1.5.RELEASE"         transitive="false" conf="test->default"/>
-    <dependency org="org.springframework"          name="spring-webmvc"          rev="4.1.5.RELEASE"         transitive="false" conf="test->default"/>
+    <dependency org="org.springframework"          name="spring-beans"           rev="${dependency.spring.framework.revision}"         transitive="false" conf="test->default"/>
+    <dependency org="org.springframework"          name="spring-context"         rev="${dependency.spring.framework.revision}"         transitive="false" conf="test->default"/>
+    <dependency org="org.springframework"          name="spring-context-support" rev="${dependency.spring.framework.revision}"         transitive="false" conf="test->default"/>
+    <dependency org="org.springframework"          name="spring-core"            rev="${dependency.spring.framework.revision}"         transitive="false" conf="test->default"/>
+    <dependency org="org.springframework.security" name="spring-security-core"   rev="${dependency.spring.security.revision}" transitive="false" conf="test->default"/>
+    <dependency org="org.springframework"          name="spring-web"             rev="${dependency.spring.framework.revision}"         transitive="false" conf="test->default"/>
+    <dependency org="org.springframework"          name="spring-webmvc"          rev="${dependency.spring.framework.revision}"         transitive="false" conf="test->default"/>
     <dependency org="geronimo-spec"            name="geronimo-spec-jta"            rev="1.0.1B-rc4" transitive="false" conf="test->default"/>
     <dependency org="geronimo-spec"            name="geronimo-spec-j2ee-connector" rev="1.5-rc4"    transitive="false" conf="test->default"/>
     <dependency org="javax.transaction"        name="jta"                          rev="1.1"        transitive="false" conf="test->default"/>
@@ -161,9 +161,9 @@
     <dependency org="commons-codec" name="commons-codec" rev="1.3" transitive="false" conf="test->default"/>
 
     <dependency org="org.apache.felix" name="org.apache.felix.main" rev="4.2.1" conf="test->default"/>
-    <dependency org="org.springframework" name="spring-expression" rev="4.1.5.RELEASE" conf="test->default"/>
-    <dependency org="org.springframework.security" name="spring-security-config" rev="3.2.5.RELEASE" transitive="false" conf="test->default"/>
-    <dependency org="org.springframework" name="spring-aop" rev="4.1.5.RELEASE" transitive="false" conf="test->default"/>
+    <dependency org="org.springframework" name="spring-expression" rev="${dependency.spring.framework.revision}" conf="test->default"/>
+    <dependency org="org.springframework.security" name="spring-security-config" rev="${dependency.spring.security.revision}" transitive="false" conf="test->default"/>
+    <dependency org="org.springframework" name="spring-aop" rev="${dependency.spring.framework.revision}" transitive="false" conf="test->default"/>
     <dependency org="org.springframework.webflow"  name="spring-binding"         rev="2.4.1.RELEASE"         transitive="false" conf="test->default"/>
     <dependency org="commons-dbcp"        name="commons-dbcp"        rev="1.4"   transitive="false" />
     <dependency org="org.jvnet.jax-ws-commons.spring" name="jaxws-spring" rev="1.8" transitive="false"/>
