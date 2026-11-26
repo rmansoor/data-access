@@ -12,10 +12,13 @@
 
 package org.pentaho.platform.dataaccess.dataset;
 
+import java.io.Serializable;
 import java.util.Objects;
 
 /** One thing wrong with a definition: the field at fault, as a JSON path, and what is wrong in plain words. */
-public final class DatasetProblem {
+public final class DatasetProblem implements Serializable {
+
+  private static final long serialVersionUID = 1L;
 
   private final String path;
   private final String message;
