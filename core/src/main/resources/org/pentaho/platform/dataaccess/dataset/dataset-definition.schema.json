@@ -1,0 +1,153 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pentaho.com/schemas/dataset-definition/1.json",
+  "title": "Pentaho dataset definition",
+  "description": "A dataset's source, columns, model, relationships, row-level security and refresh. Version 1. The server checks references between parts (for example that a measure's column exists) beyond what this schema expresses.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "id", "name", "source", "columns"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$" },
+    "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "description": { "type": "string" },
+    "owner": { "type": "string" },
+    "source": { "$ref": "#/$defs/source" },
+    "columns": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/column" } },
+    "model": { "$ref": "#/$defs/model" },
+    "relationships": { "type": "array", "items": { "$ref": "#/$defs/relationship" } },
+    "security": { "$ref": "#/$defs/security" },
+    "refresh": { "$ref": "#/$defs/refresh" },
+    "legacy": { "$ref": "#/$defs/legacy" }
+  },
+  "$defs": {
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": { "enum": ["TABLES", "SQL", "FILE"] },
+        "connection": { "type": "string", "minLength": 1 },
+        "tables": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+        "sql": { "type": "string", "minLength": 1 },
+        "file": { "$ref": "#/$defs/file" }
+      },
+      "allOf": [
+        { "if": { "properties": { "type": { "const": "TABLES" } } }, "then": { "required": ["connection", "tables"] } },
+        { "if": { "properties": { "type": { "const": "SQL" } } }, "then": { "required": ["connection", "sql"] } },
+        { "if": { "properties": { "type": { "const": "FILE" } } }, "then": { "required": ["file"] } }
+      ]
+    },
+    "file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "path"],
+      "properties": {
+        "format": { "enum": ["CSV"] },
+        "path": { "type": "string", "minLength": 1 },
+        "encoding": { "type": "string" },
+        "delimiter": { "type": "string", "minLength": 1, "maxLength": 1 },
+        "enclosure": { "type": "string", "maxLength": 1 },
+        "headerRow": { "type": "boolean" },
+        "stagingTable": { "type": "string" }
+      }
+    },
+    "column": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "table": { "type": "string" },
+        "sourceName": { "type": "string" },
+        "type": { "enum": ["STRING", "INTEGER", "DECIMAL", "BOOLEAN", "DATE", "TIMESTAMP"] },
+        "label": { "type": "string" },
+        "description": { "type": "string" },
+        "format": { "type": "string" },
+        "hidden": { "type": "boolean" }
+      }
+    },
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "dimensions": { "type": "array", "items": { "$ref": "#/$defs/dimension" } },
+        "measures": { "type": "array", "items": { "$ref": "#/$defs/measure" } }
+      }
+    },
+    "dimension": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "levels"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "levels": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+        "time": { "type": "boolean" }
+      }
+    },
+    "measure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "column", "aggregation"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "column": { "type": "string", "minLength": 1 },
+        "aggregation": { "enum": ["SUM", "COUNT", "COUNT_DISTINCT", "AVERAGE", "MINIMUM", "MAXIMUM"] },
+        "format": { "type": "string" }
+      }
+    },
+    "relationship": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fromTable", "fromColumn", "toTable", "toColumn", "joinType"],
+      "properties": {
+        "fromTable": { "type": "string", "minLength": 1 },
+        "fromColumn": { "type": "string", "minLength": 1 },
+        "toTable": { "type": "string", "minLength": 1 },
+        "toColumn": { "type": "string", "minLength": 1 },
+        "joinType": { "enum": ["INNER", "LEFT_OUTER"] },
+        "cardinality": { "enum": ["MANY_TO_ONE", "ONE_TO_ONE", "ONE_TO_MANY"] }
+      }
+    },
+    "security": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rules": { "type": "array", "items": { "$ref": "#/$defs/rowRule" } }
+      }
+    },
+    "rowRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["column", "values"],
+      "properties": {
+        "role": { "type": "string", "minLength": 1 },
+        "user": { "type": "string", "minLength": 1 },
+        "column": { "type": "string", "minLength": 1 },
+        "values": { "type": "array", "minItems": 1, "items": { "type": "string" } }
+      },
+      "oneOf": [{ "required": ["role"] }, { "required": ["user"] }]
+    },
+    "refresh": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode"],
+      "properties": {
+        "mode": { "enum": ["MANUAL", "SCHEDULED"] },
+        "cron": { "type": "string", "minLength": 1 },
+        "timeZone": { "type": "string" }
+      },
+      "if": { "properties": { "mode": { "const": "SCHEDULED" } } },
+      "then": { "required": ["cron"] }
+    },
+    "legacy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "domainId": { "type": "string" },
+        "modelId": { "type": "string" },
+        "catalogName": { "type": "string" }
+      }
+    }
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "id": "monthly-orders",
+  "name": "Monthly orders",
+  "description": "Orders exported from the shop each month",
+  "owner": "suzy",
+  "source": {
+    "type": "FILE",
+    "file": {
+      "format": "CSV",
+      "path": "/home/suzy/uploads/orders-2026-10.csv",
+      "encoding": "UTF-8",
+      "delimiter": ",",
+      "enclosure": "\"",
+      "headerRow": true,
+      "stagingTable": "ds_monthly_orders"
+    }
+  },
+  "columns": [
+    { "name": "order_date", "type": "DATE", "label": "Order date", "format": "yyyy-MM-dd" },
+    { "name": "region", "type": "STRING", "label": "Region" },
+    { "name": "product", "type": "STRING", "label": "Product" },
+    { "name": "quantity", "type": "INTEGER", "label": "Quantity" },
+    { "name": "amount", "sourceName": "AMOUNT_USD", "type": "DECIMAL", "label": "Amount", "format": "#,##0.00", "description": "Order value in US dollars" },
+    { "name": "internal_ref", "type": "STRING", "hidden": true }
+  ],
+  "model": {
+    "dimensions": [
+      { "name": "Date", "levels": ["order_date"], "time": true },
+      { "name": "Region", "levels": ["region"] },
+      { "name": "Product", "levels": ["product"] }
+    ],
+    "measures": [
+      { "name": "Quantity", "column": "quantity", "aggregation": "SUM" },
+      { "name": "Revenue", "column": "amount", "aggregation": "SUM", "format": "$#,##0" },
+      { "name": "Orders", "column": "internal_ref", "aggregation": "COUNT_DISTINCT" }
+    ]
+  },
+  "refresh": { "mode": "SCHEDULED", "cron": "0 0 6 1 * ?", "timeZone": "America/New_York" }
+}
