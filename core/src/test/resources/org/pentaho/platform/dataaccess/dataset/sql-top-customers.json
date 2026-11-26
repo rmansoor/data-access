@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "top-customers",
+  "name": "Top customers",
+  "source": {
+    "type": "SQL",
+    "connection": "SampleData",
+    "sql": "SELECT c.CUSTOMERNAME, c.COUNTRY, SUM(p.AMOUNT) AS PAID FROM CUSTOMERS c JOIN PAYMENTS p ON p.CUSTOMERNUMBER = c.CUSTOMERNUMBER GROUP BY c.CUSTOMERNAME, c.COUNTRY"
+  },
+  "columns": [
+    { "name": "CUSTOMERNAME", "type": "STRING", "label": "Customer" },
+    { "name": "COUNTRY", "type": "STRING", "label": "Country" },
+    { "name": "PAID", "type": "DECIMAL", "label": "Paid", "format": "#,##0.00" }
+  ],
+  "model": {
+    "dimensions": [ { "name": "Customer", "levels": ["COUNTRY", "CUSTOMERNAME"] } ],
+    "measures": [ { "name": "Paid", "column": "PAID", "aggregation": "SUM" } ]
+  }
+}

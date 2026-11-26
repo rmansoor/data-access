@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "id": "steelwheels-sales",
+  "name": "Steel Wheels sales",
+  "owner": "admin",
+  "source": {
+    "type": "TABLES",
+    "connection": "SampleData",
+    "tables": ["ORDERFACT", "CUSTOMER_W_TER", "PRODUCTS"]
+  },
+  "columns": [
+    { "name": "ORDERDATE", "table": "ORDERFACT", "type": "TIMESTAMP" },
+    { "name": "QUANTITYORDERED", "table": "ORDERFACT", "type": "INTEGER" },
+    { "name": "TOTALPRICE", "table": "ORDERFACT", "type": "DECIMAL" },
+    { "name": "TERRITORY", "table": "CUSTOMER_W_TER", "type": "STRING" },
+    { "name": "CUSTOMERNAME", "table": "CUSTOMER_W_TER", "type": "STRING" },
+    { "name": "PRODUCTLINE", "table": "PRODUCTS", "type": "STRING" },
+    { "name": "PRODUCTNAME", "table": "PRODUCTS", "type": "STRING" }
+  ],
+  "model": {
+    "dimensions": [
+      { "name": "Markets", "levels": ["TERRITORY", "CUSTOMERNAME"] },
+      { "name": "Product", "levels": ["PRODUCTLINE", "PRODUCTNAME"] },
+      { "name": "Time", "levels": ["ORDERDATE"], "time": true }
+    ],
+    "measures": [
+      { "name": "Quantity", "column": "QUANTITYORDERED", "aggregation": "SUM" },
+      { "name": "Sales", "column": "TOTALPRICE", "aggregation": "SUM", "format": "#,##0" }
+    ]
+  },
+  "relationships": [
+    { "fromTable": "ORDERFACT", "fromColumn": "CUSTOMERNUMBER", "toTable": "CUSTOMER_W_TER", "toColumn": "CUSTOMERNUMBER", "joinType": "INNER", "cardinality": "MANY_TO_ONE" },
+    { "fromTable": "ORDERFACT", "fromColumn": "PRODUCTCODE", "toTable": "PRODUCTS", "toColumn": "PRODUCTCODE", "joinType": "LEFT_OUTER", "cardinality": "MANY_TO_ONE" }
+  ],
+  "security": {
+    "rules": [
+      { "role": "EMEA Sales", "column": "TERRITORY", "values": ["EMEA"] },
+      { "user": "pat", "column": "TERRITORY", "values": ["NA", "APAC"] }
+    ]
+  },
+  "refresh": { "mode": "MANUAL" },
+  "legacy": { "domainId": "Steel Wheels sales.xmi", "modelId": "MODEL_1", "catalogName": "Steel Wheels sales" }
+}

@@ -94,6 +94,11 @@
       <artifactId>pentaho-platform-extensions</artifactId>
     </dependency>
     <dependency>
+      <!-- Dataset definitions (org.pentaho.platform.dataaccess.dataset) are JSON; version from the parent pom. -->
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+    </dependency>
+    <dependency>
       <groupId>org.pentaho</groupId>
       <artifactId>commons-database-model</artifactId>
     </dependency>
