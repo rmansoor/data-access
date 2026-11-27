@@ -23,4 +23,9 @@ public interface DatasetPermissions {
 
   /** May create, change and delete datasets (data-access manage permission). */
   boolean canManage();
+
+  /** Administers security: sees and changes every dataset whatever its sharing. */
+  default boolean canAdminister() {
+    return false;
+  }
 }

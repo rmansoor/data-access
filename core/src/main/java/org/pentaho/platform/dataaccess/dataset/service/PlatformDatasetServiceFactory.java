@@ -26,19 +26,21 @@ public class PlatformDatasetServiceFactory implements Supplier<DatasetService> {
 
   private final DatasetStore store;
   private final DatasetPermissions permissions;
+  private final DatasetSharing sharing;
 
   public PlatformDatasetServiceFactory() {
-    this( new RepositoryDatasetStore(), new PlatformDatasetPermissions() );
+    this( new RepositoryDatasetStore(), new PlatformDatasetPermissions(), new RepositoryDatasetSharing() );
   }
 
-  public PlatformDatasetServiceFactory( DatasetStore store, DatasetPermissions permissions ) {
+  public PlatformDatasetServiceFactory( DatasetStore store, DatasetPermissions permissions, DatasetSharing sharing ) {
     this.store = store;
     this.permissions = permissions;
+    this.sharing = sharing;
   }
 
   @Override
   public DatasetService get() {
-    return new DatasetService( store, permissions, PlatformDatasetServiceFactory::currentUser );
+    return new DatasetService( store, permissions, PlatformDatasetServiceFactory::currentUser, sharing );
   }
 
   private static String currentUser() {

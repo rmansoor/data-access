@@ -45,6 +45,7 @@
   <bean class="org.pentaho.platform.dataaccess.dataset.api.DatasetsResource">
     <constructor-arg ref="datasetServiceFactory"/>
   </bean>
+  <bean class="org.pentaho.platform.dataaccess.dataset.api.DatasetsApiDocResource"/>
   <bean class="org.pentaho.platform.dataaccess.datasource.wizard.service.impl.DatabaseDialectService"/>
   <bean class="org.pentaho.platform.dataaccess.datasource.wizard.service.impl.DataAccessPermissionResource" />
   <bean class="org.pentaho.platform.dataaccess.datasource.wizard.service.impl.DatabaseConnectionReaderWriter" scope="singleton"/>

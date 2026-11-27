@@ -20,6 +20,7 @@ import org.junit.Test;
 import org.pentaho.platform.dataaccess.dataset.DatasetJson;
 import org.pentaho.platform.dataaccess.dataset.service.DatasetPermissions;
 import org.pentaho.platform.dataaccess.dataset.service.DatasetService;
+import org.pentaho.platform.dataaccess.dataset.service.InMemoryDatasetSharing;
 import org.pentaho.platform.dataaccess.dataset.service.InMemoryDatasetStore;
 
 import static org.junit.Assert.assertEquals;
@@ -51,7 +52,8 @@ public class DatasetsResourceTest {
         return canManage;
       }
     };
-    resource = new DatasetsResource( () -> new DatasetService( store, permissions, () -> "suzy" ) );
+    InMemoryDatasetSharing sharing = new InMemoryDatasetSharing( () -> "suzy", java.util.List::of );
+    resource = new DatasetsResource( () -> new DatasetService( store, permissions, () -> "suzy", sharing ) );
   }
 
   private static JsonNode body( Response r ) throws Exception {
@@ -163,6 +165,41 @@ public class DatasetsResourceTest {
     Response unsafe = resource.get( "..", null );
     assertEquals( 400, unsafe.getStatus() );
     assertEquals( "invalid-definition", body( unsafe ).get( "code" ).asText() );
+  }
+
+  @Test
+  public void sharesWithTheAclEndpointsAndItsOwnETag() throws Exception {
+    resource.create( CSV );
+    Response open = resource.getAcl( "monthly-orders" );
+    assertEquals( 200, open.getStatus() );
+    assertFalse( body( open ).get( "restricted" ).asBoolean() );
+    String tag = etag( open );
+
+    String restricted = "{\"restricted\":true,\"entries\":[{\"recipient\":\"Sales\",\"type\":\"ROLE\",\"access\":\"READ\"}]}";
+    assertEquals( 428, resource.setAcl( "monthly-orders", null, restricted ).getStatus() );
+    Response set = resource.setAcl( "monthly-orders", tag, restricted );
+    assertEquals( 200, set.getStatus() );
+    JsonNode entries = body( set ).get( "entries" );
+    assertEquals( "the owner is kept", "suzy", entries.get( 0 ).get( "recipient" ).asText() );
+    assertEquals( "Sales", entries.get( 1 ).get( "recipient" ).asText() );
+
+    Response stale = resource.setAcl( "monthly-orders", tag, "{\"restricted\":false}" );
+    assertEquals( 412, stale.getStatus() );
+    assertEquals( 200, resource.setAcl( "monthly-orders", etag( set ), "{\"restricted\":false}" ).getStatus() );
+  }
+
+  @Test
+  public void answersABadSharingBodyWithTheFieldPath() throws Exception {
+    resource.create( CSV );
+    String tag = etag( resource.getAcl( "monthly-orders" ) );
+    JsonNode typo = body( resource.setAcl( "monthly-orders", tag,
+      "{\"restricted\":true,\"entries\":[{\"recipient\":\"x\",\"type\":\"GROUP\",\"access\":\"READ\"}]}" ) );
+    assertEquals( "invalid-request", typo.get( "code" ).asText() );
+    assertEquals( "entries[0].type", typo.get( "path" ).asText() );
+
+    Response incomplete = resource.setAcl( "monthly-orders", tag, "{\"restricted\":true,\"entries\":[{\"recipient\":\"x\"}]}" );
+    assertEquals( 422, incomplete.getStatus() );
+    assertEquals( 2, body( incomplete ).get( "problems" ).size() );
   }
 
   @Test

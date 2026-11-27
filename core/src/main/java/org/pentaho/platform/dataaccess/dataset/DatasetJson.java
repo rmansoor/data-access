@@ -101,6 +101,11 @@ public final class DatasetJson {
     return MAPPER.treeToValue( upgraded, DatasetDefinition.class );
   }
 
+  /** A Jackson failure as a {@link DatasetFormatException} naming the field at fault; for other JSON bodies of the API. */
+  public static DatasetFormatException explain( JsonProcessingException e ) {
+    return translate( e );
+  }
+
   private static DatasetFormatException translate( JsonProcessingException e ) {
     if ( e instanceof JsonMappingException ) {
       JsonMappingException mapping = (JsonMappingException) e;

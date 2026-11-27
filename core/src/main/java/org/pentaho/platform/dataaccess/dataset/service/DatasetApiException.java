@@ -29,6 +29,8 @@ public class DatasetApiException extends RuntimeException {
   public enum Code {
     /** The request body is not a readable definition (400). */
     INVALID_DEFINITION( 400 ),
+    /** Any other request body or parameter that can't be read, such as sharing (400). */
+    INVALID_REQUEST( 400 ),
     /** The definition is readable but incomplete or inconsistent (422). */
     VALIDATION_FAILED( 422 ),
     /** The caller may not do this (403). */

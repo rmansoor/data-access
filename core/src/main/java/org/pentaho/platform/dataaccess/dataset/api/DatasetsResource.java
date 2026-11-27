@@ -12,6 +12,7 @@
 
 package org.pentaho.platform.dataaccess.dataset.api;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -37,6 +38,7 @@ import org.pentaho.platform.dataaccess.dataset.DatasetProblem;
 import org.pentaho.platform.dataaccess.dataset.service.DatasetApiException;
 import org.pentaho.platform.dataaccess.dataset.service.DatasetApiException.Code;
 import org.pentaho.platform.dataaccess.dataset.service.DatasetService;
+import org.pentaho.platform.dataaccess.dataset.service.DatasetShare;
 import org.pentaho.platform.dataaccess.dataset.service.StoredDataset;
 
 import java.net.URI;
@@ -151,6 +153,30 @@ public class DatasetsResource {
     } );
   }
 
+  /**
+   * Who the dataset is shared with: {@code {"restricted": false, "entries": []}}, or restricted to
+   * users and roles with READ or WRITE access. The ETag is the sharing's own version.
+   */
+  @GET
+  @Path( "{id}/acl" )
+  public Response getAcl( @PathParam( "id" ) String id ) {
+    return handle( () -> share( Response.ok(), service.get().getSharing( id ) ) );
+  }
+
+  /** Replaces the sharing. Owner or administrator only; requires If-Match with the sharing's ETag. */
+  @PUT
+  @Path( "{id}/acl" )
+  @Consumes( MediaType.APPLICATION_JSON )
+  public Response setAcl( @PathParam( "id" ) String id, @HeaderParam( HttpHeaders.IF_MATCH ) String ifMatch, String body ) {
+    return handle( () -> {
+      DatasetService s = service.get();
+      DatasetShare share = parseShare( body );
+      String expected = ifMatch == null || ifMatch.trim().isEmpty() ? null
+        : "*".equals( ifMatch.trim() ) ? s.getSharing( id ).tag() : version( ifMatch );
+      return share( Response.ok(), s.setSharing( id, share, expected ) );
+    } );
+  }
+
   /** Sample rows come from the source adapters (CWBA-62). */
   @POST
   @Path( "{id}/sample" )
@@ -182,6 +208,22 @@ public class DatasetsResource {
     } catch ( DatasetFormatException e ) {
       throw new DatasetApiException( Code.INVALID_DEFINITION, e.getPath(), e.getMessage(), null, e );
     }
+  }
+
+  private DatasetShare parseShare( String body ) {
+    if ( body == null || body.trim().isEmpty() ) {
+      throw new DatasetApiException( Code.INVALID_REQUEST, "Send the sharing as JSON in the request body" );
+    }
+    try {
+      return mapper.readValue( body, DatasetShare.class );
+    } catch ( JsonProcessingException e ) {
+      DatasetFormatException f = DatasetJson.explain( e );
+      throw new DatasetApiException( Code.INVALID_REQUEST, f.getPath(), f.getMessage(), null, e );
+    }
+  }
+
+  private Response share( Response.ResponseBuilder builder, DatasetShare share ) throws JsonProcessingException {
+    return builder.tag( new EntityTag( share.tag() ) ).entity( mapper.writeValueAsString( share ) ).type( MediaType.APPLICATION_JSON ).build();
   }
 
   private Response definition( Response.ResponseBuilder builder, StoredDataset stored ) {

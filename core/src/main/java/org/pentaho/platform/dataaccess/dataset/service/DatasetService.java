@@ -18,9 +18,12 @@ import org.pentaho.platform.dataaccess.dataset.DatasetProblem;
 import org.pentaho.platform.dataaccess.dataset.DatasetUpgrades;
 import org.pentaho.platform.dataaccess.dataset.DatasetValidator;
 
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -38,18 +41,27 @@ public class DatasetService {
   private final DatasetStore store;
   private final DatasetPermissions permissions;
   private final Supplier<String> currentUser;
+  private final DatasetSharing sharing;
   private final DatasetValidator validator = new DatasetValidator();
 
+  /** With sharing kept by this service instance only; for tests and single-user tools. */
   public DatasetService( DatasetStore store, DatasetPermissions permissions, Supplier<String> currentUser ) {
+    this( store, permissions, currentUser, new InMemoryDatasetSharing( currentUser, List::of ) );
+  }
+
+  public DatasetService( DatasetStore store, DatasetPermissions permissions, Supplier<String> currentUser,
+                         DatasetSharing sharing ) {
     this.store = store;
     this.permissions = permissions;
     this.currentUser = currentUser;
+    this.sharing = sharing;
   }
 
-  /** Every dataset, by name. */
+  /** Every dataset the caller may see, by name. */
   public List<StoredDataset> list() {
     requireView();
     return store.list().stream()
+      .filter( s -> mayRead( s.getDefinition() ) )
       .sorted( Comparator.comparing( ( StoredDataset s ) -> String.valueOf( s.getDefinition().getName() ).toLowerCase( Locale.ROOT ) )
         .thenComparing( s -> s.getDefinition().getId() ) )
       .collect( Collectors.toList() );
@@ -57,7 +69,7 @@ public class DatasetService {
 
   public StoredDataset get( String id ) {
     requireView();
-    return load( id );
+    return readable( id );
   }
 
   /**
@@ -94,8 +106,12 @@ public class DatasetService {
         "is \"" + definition.getId() + "\" but the address names \"" + id + "\"; a dataset's id can't change", null, null );
     }
     requireName( definition );
+    DatasetDefinition current = writable( id ).getDefinition();
     if ( definition.getOwner() == null || definition.getOwner().trim().isEmpty() ) {
-      definition.setOwner( load( id ).getDefinition().getOwner() );
+      definition.setOwner( current.getOwner() );
+    } else if ( !definition.getOwner().equals( current.getOwner() ) && !isOwnerOrAdmin( current ) ) {
+      throw new DatasetApiException( Code.FORBIDDEN, "owner", "Only the owner or an administrator can hand a dataset to someone else",
+        null, null );
     }
     definition.setSchemaVersion( DatasetUpgrades.CURRENT_VERSION );
     return store.update( definition, expectedVersion );
@@ -104,21 +120,136 @@ public class DatasetService {
   /** What still has to be fixed before the dataset can be published; empty when it is ready. */
   public List<DatasetProblem> validate( String id ) {
     requireView();
-    return validator.validate( load( id ).getDefinition() );
+    return validator.validate( readable( id ).getDefinition() );
   }
 
   public void delete( String id, String expectedVersion ) {
     requireManage();
     requireValidId( id, "" );
     requireVersion( expectedVersion );
+    writable( id );
     store.delete( id, expectedVersion );
+  }
+
+  /** Who the dataset is shared with. Anyone who can see the dataset can see this. */
+  public DatasetShare getSharing( String id ) {
+    requireView();
+    readable( id );
+    return sharing.get( id );
+  }
+
+  /**
+   * Changes who the dataset is shared with; only its owner or an administrator may. {@code expectedTag}
+   * is the sharing's {@link DatasetShare#tag()} from the caller's last read. A restricted dataset
+   * always keeps its owner, with write access, so nobody locks the owner out.
+   */
+  public DatasetShare setSharing( String id, DatasetShare share, String expectedTag ) {
+    requireManage();
+    DatasetDefinition d = readable( id ).getDefinition();
+    if ( !isOwnerOrAdmin( d ) ) {
+      throw new DatasetApiException( Code.FORBIDDEN, "Only the dataset's owner or an administrator can change who it is shared with" );
+    }
+    requireVersion( expectedTag );
+    String now = sharing.get( id ).tag();
+    if ( !now.equals( expectedTag ) ) {
+      throw new DatasetApiException( Code.STALE_VERSION,
+        "The sharing changed since it was read; read it again and reapply the change" );
+    }
+    List<DatasetProblem> problems = problems( share );
+    if ( !problems.isEmpty() ) {
+      throw new DatasetApiException( Code.VALIDATION_FAILED, problems.get( 0 ).getPath(),
+        "The sharing is not valid: " + problems.get( 0 ), problems, null );
+    }
+    DatasetShare toStore = share.normalized();
+    if ( toStore.isRestricted() && d.getOwner() != null && !d.getOwner().isEmpty() ) {
+      toStore.getEntries().removeIf( e -> e.getType() == DatasetShare.RecipientType.USER && e.getRecipient().equals( d.getOwner() ) );
+      toStore.getEntries().add( new DatasetShare.Entry( d.getOwner(), DatasetShare.RecipientType.USER, DatasetShare.Access.WRITE ) );
+    }
+    sharing.set( id, toStore );
+    return sharing.get( id );
   }
 
   // ------------------------------------------------------------------------------------------------
 
+  /** The dataset, if the caller may see it; otherwise NOT_FOUND, so its existence isn't revealed. */
+  private StoredDataset readable( String id ) {
+    StoredDataset s = load( id );
+    if ( !mayRead( s.getDefinition() ) ) {
+      throw notFound( id );
+    }
+    return s;
+  }
+
+  /** The dataset, if the caller may change it. */
+  private StoredDataset writable( String id ) {
+    StoredDataset s = readable( id );
+    DatasetDefinition d = s.getDefinition();
+    if ( !isOwnerOrAdmin( d ) && !sharing.canWrite( d.getId() ) ) {
+      throw new DatasetApiException( Code.FORBIDDEN, "This dataset is shared with you to use, not to change" );
+    }
+    return s;
+  }
+
+  private boolean mayRead( DatasetDefinition d ) {
+    return isOwnerOrAdmin( d ) || sharing.canRead( d.getId() );
+  }
+
+  private boolean isOwnerOrAdmin( DatasetDefinition d ) {
+    String me = currentUser.get();
+    return permissions.canAdminister() || ( me != null && me.equals( d.getOwner() ) );
+  }
+
+  private static DatasetApiException notFound( String id ) {
+    return new DatasetApiException( Code.NOT_FOUND, "No dataset with id \"" + id + "\"" );
+  }
+
+  static List<DatasetProblem> problems( DatasetShare share ) {
+    List<DatasetProblem> problems = new ArrayList<>();
+    if ( share == null ) {
+      problems.add( new DatasetProblem( "", "is required" ) );
+      return problems;
+    }
+    List<DatasetShare.Entry> entries = share.getEntries();
+    if ( !share.isRestricted() ) {
+      if ( !entries.isEmpty() ) {
+        problems.add( new DatasetProblem( "entries", "must be empty unless restricted is true" ) );
+      }
+      return problems;
+    }
+    if ( entries.size() > DatasetShare.MAX_ENTRIES ) {
+      problems.add( new DatasetProblem( "entries", "has more than " + DatasetShare.MAX_ENTRIES + " entries" ) );
+      return problems;
+    }
+    Set<String> seen = new HashSet<>();
+    for ( int i = 0; i < entries.size(); i++ ) {
+      DatasetShare.Entry e = entries.get( i );
+      String at = "entries[" + i + "]";
+      if ( e == null ) {
+        problems.add( new DatasetProblem( at, "is empty" ) );
+        continue;
+      }
+      String r = e.getRecipient();
+      if ( r == null || r.trim().isEmpty() ) {
+        problems.add( new DatasetProblem( at + ".recipient", "is required" ) );
+      } else if ( r.length() > DatasetShare.MAX_RECIPIENT || r.chars().anyMatch( Character::isISOControl ) || !r.equals( r.trim() ) ) {
+        problems.add( new DatasetProblem( at + ".recipient", "is not a valid user or role name" ) );
+      }
+      if ( e.getType() == null ) {
+        problems.add( new DatasetProblem( at + ".type", "is required (USER or ROLE)" ) );
+      }
+      if ( e.getAccess() == null ) {
+        problems.add( new DatasetProblem( at + ".access", "is required (READ or WRITE)" ) );
+      }
+      if ( r != null && e.getType() != null && !seen.add( e.getType() + ":" + r ) ) {
+        problems.add( new DatasetProblem( at, "repeats " + e.getType().name().toLowerCase( Locale.ROOT ) + " \"" + r + "\"" ) );
+      }
+    }
+    return problems;
+  }
+
   private StoredDataset load( String id ) {
     requireValidId( id, "" );
-    return store.load( id ).orElseThrow( () -> new DatasetApiException( Code.NOT_FOUND, "No dataset with id \"" + id + "\"" ) );
+    return store.load( id ).orElseThrow( () -> notFound( id ) );
   }
 
   private void requireView() {
