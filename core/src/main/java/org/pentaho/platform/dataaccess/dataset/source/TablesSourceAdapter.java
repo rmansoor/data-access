@@ -88,6 +88,41 @@ public class TablesSourceAdapter extends JdbcSourceSupport {
     } );
   }
 
+  /** The most tables {@link #list(String)} returns. */
+  public static final int MAX_LISTED = 5000;
+
+  /** Schemas that hold the database's own catalog, never user data. Compared case-insensitively. */
+  private static final Set<String> SYSTEM_SCHEMAS = Set.of( "information_schema", "system_lobs", "pg_catalog", "pg_toast",
+    "sys", "system", "mysql", "performance_schema", "ctxsys", "mdsys", "xdb", "outln", "dbsnmp", "wmsys", "ordsys", "olapsys",
+    "appqossys", "audsys", "gsmadmin_internal", "lbacsys", "dvsys", "ojvmsys", "sysibm", "syscat", "sysstat", "sysfun", "sysproc" );
+
+  /**
+   * The tables and views on a connection, by schema and name, leaving out the database's own
+   * catalog schemas; at most {@link #MAX_LISTED}. Read-only, like every read here.
+   */
+  public TableList list( String connection ) {
+    return withConnection( connection, c -> {
+      List<TableList.Entry> found = new ArrayList<>();
+      boolean truncated = false;
+      try ( ResultSet rs = c.getMetaData().getTables( null, null, "%", new String[] { "TABLE", "VIEW" } ) ) {
+        while ( rs.next() ) {
+          String schema = rs.getString( "TABLE_SCHEM" );
+          if ( schema != null && SYSTEM_SCHEMAS.contains( schema.toLowerCase( Locale.ROOT ) ) ) {
+            continue;
+          }
+          if ( found.size() == MAX_LISTED ) {
+            truncated = true;
+            break;
+          }
+          found.add( new TableList.Entry( schema, rs.getString( "TABLE_NAME" ), rs.getString( "TABLE_TYPE" ) ) );
+        }
+      }
+      found.sort( java.util.Comparator.comparing( ( TableList.Entry e ) -> e.getSchema() == null ? "" : e.getSchema(),
+        String.CASE_INSENSITIVE_ORDER ).thenComparing( TableList.Entry::getName, String.CASE_INSENSITIVE_ORDER ) );
+      return new TableList( found, truncated );
+    } );
+  }
+
   // ------------------------------------------------------------------------------------------------
 
   private static void requireTables( Source source ) {

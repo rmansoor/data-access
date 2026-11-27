@@ -219,6 +219,22 @@
         }
       }
     },
+    "/data-access/api/v2/connections/{name}/tables": {
+      "parameters": [{ "name": "name", "in": "path", "required": true, "description": "A database connection's name", "schema": { "type": "string" } }],
+      "get": {
+        "tags": ["Datasets"],
+        "operationId": "listConnectionTables",
+        "summary": "List the tables and views on a connection",
+        "description": "For choosing a TABLES source. Sorted by schema and name, leaving out the database's own catalog schemas; at most 5000. Read-only, with the same timeout as sampling. Needs the permission to manage datasets.",
+        "responses": {
+          "200": { "description": "The tables", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TableList" } } } },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "422": { "description": "`validation-failed`: no connection has that name. `source-failed`: the database refused or failed.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "500": { "$ref": "#/components/responses/Internal" },
+          "501": { "$ref": "#/components/responses/NotImplemented" }
+        }
+      }
+    },
     "/data-access/api/v2/openapi.json": {
       "get": {
         "tags": ["About this API"],
@@ -340,6 +356,26 @@
           "name": { "type": "string", "description": "The column's name in the table: letters, digits and underscores" },
           "type": { "type": "string", "enum": ["STRING", "INTEGER", "DECIMAL", "BOOLEAN", "DATE", "TIMESTAMP"] },
           "sqlType": { "type": "string", "description": "The type the column was created with, in the staging database's terms" }
+        }
+      },
+      "TableList": {
+        "type": "object",
+        "required": ["tables", "truncated"],
+        "properties": {
+          "tables": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["name", "type", "qualifiedName"],
+              "properties": {
+                "schema": { "type": "string" },
+                "name": { "type": "string" },
+                "type": { "type": "string", "description": "TABLE or VIEW" },
+                "qualifiedName": { "type": "string", "description": "`schema.name`, or `name` without a schema: what a TABLES source lists" }
+              }
+            }
+          },
+          "truncated": { "type": "boolean", "description": "The connection has more tables than were listed" }
         }
       },
       "Validation": {

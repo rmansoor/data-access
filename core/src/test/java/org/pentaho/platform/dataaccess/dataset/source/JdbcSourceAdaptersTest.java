@@ -213,4 +213,23 @@ public class JdbcSourceAdaptersTest {
       return e;
     }
   }
+
+  @Test
+  public void listsTheConnectionsTablesAndViewsWithoutTheDatabasesOwn() throws Exception {
+    try ( Statement st = db.createStatement() ) {
+      st.execute( "CREATE VIEW sales.big_orders AS SELECT * FROM sales.orders WHERE amount > 50" );
+    }
+    TableList list = tables.list( "Sample" );
+    assertFalse( list.isTruncated() );
+    assertEquals( "[Mixed Case:TABLE, SALES.BIG_ORDERS:VIEW, SALES.ORDERS:TABLE]",
+      list.getTables().stream().map( e -> ( e.getSchema() == null || e.getSchema().equals( "PUBLIC" ) ? e.getName() : e.getQualifiedName() )
+        + ":" + e.getType() ).collect( java.util.stream.Collectors.toList() ).toString() );
+    assertTrue( list.getTables().stream().noneMatch( e -> "INFORMATION_SCHEMA".equals( e.getSchema() ) ) );
+    try {
+      tables.list( "Nope" );
+      fail();
+    } catch ( DatasetApiException e ) {
+      assertEquals( Code.VALIDATION_FAILED, e.getCode() );
+    }
+  }
 }

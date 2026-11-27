@@ -66,7 +66,8 @@ public class DatasetsResource {
 
   private final Supplier<DatasetService> service;
   private final DatasetJson json = new DatasetJson();
-  private final ObjectMapper mapper = DatasetJson.mapper();
+  static final ObjectMapper MAPPER = DatasetJson.mapper();
+  private final ObjectMapper mapper = MAPPER;
 
   /** @param service built per request, so it sees the caller's session (see the Spring wiring) */
   public DatasetsResource( Supplier<DatasetService> service ) {
@@ -274,6 +275,11 @@ public class DatasetsResource {
   }
 
   private Response handle( Action action ) {
+    return respond( action );
+  }
+
+  /** Runs a request, answering API errors with their code and problems, anything else as INTERNAL. */
+  static Response respond( Action action ) {
     try {
       return action.run();
     } catch ( DatasetApiException e ) {
@@ -284,8 +290,8 @@ public class DatasetsResource {
     }
   }
 
-  private Response error( Code code, String message, String path, List<DatasetProblem> problems ) {
-    ObjectNode body = mapper.createObjectNode();
+  private static Response error( Code code, String message, String path, List<DatasetProblem> problems ) {
+    ObjectNode body = MAPPER.createObjectNode();
     body.put( "code", code.wire() );
     body.put( "message", message );
     putIfPresent( body, "path", path );
@@ -294,7 +300,7 @@ public class DatasetsResource {
     }
     String text;
     try {
-      text = mapper.writeValueAsString( body );
+      text = MAPPER.writeValueAsString( body );
     } catch ( Exception e ) {
       text = "{\"code\":\"internal\"}";
     }
@@ -315,7 +321,7 @@ public class DatasetsResource {
   }
 
   @FunctionalInterface
-  private interface Action {
+  interface Action {
     Response run() throws Exception;
   }
 }

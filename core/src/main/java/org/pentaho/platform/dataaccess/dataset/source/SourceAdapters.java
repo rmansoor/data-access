@@ -72,6 +72,15 @@ public final class SourceAdapters {
     return stager;
   }
 
+  /** The adapter for database tables, which also lists a connection's tables. */
+  public TablesSourceAdapter tables() {
+    SourceAdapter a = byType.get( SourceType.TABLES );
+    if ( !( a instanceof TablesSourceAdapter ) ) {
+      throw new DatasetApiException( Code.NOT_IMPLEMENTED, "This server can't list database tables" );
+    }
+    return (TablesSourceAdapter) a;
+  }
+
   /** Whether files can be staged, for cleaning up after datasets that were. */
   public boolean canStage() {
     return stager != null;

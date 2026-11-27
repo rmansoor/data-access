@@ -26,6 +26,7 @@ import org.pentaho.platform.dataaccess.dataset.DatasetDefinition.SourceType;
 import org.pentaho.platform.dataaccess.dataset.source.CsvStager;
 import org.pentaho.platform.dataaccess.dataset.source.Sample;
 import org.pentaho.platform.dataaccess.dataset.source.StagedTable;
+import org.pentaho.platform.dataaccess.dataset.source.TableList;
 import org.pentaho.platform.dataaccess.dataset.source.SourceAdapters;
 import org.pentaho.platform.dataaccess.dataset.source.SourceLimits;
 
@@ -172,6 +173,15 @@ public class DatasetService {
     }
     requireReadableSource( d );
     return sources.forSource( d.getSource() ).sample( d.getSource(), n, table );
+  }
+
+  /**
+   * The tables and views on a connection, for choosing a TABLES source. For people who manage
+   * datasets, since it shows what a database holds.
+   */
+  public TableList connectionTables( String connection ) {
+    requireManage();
+    return sources.tables().list( connection );
   }
 
   /** A dataset after its file was loaded, and the table it was loaded into. */
