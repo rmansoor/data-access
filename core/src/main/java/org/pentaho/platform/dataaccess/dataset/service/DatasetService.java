@@ -17,6 +17,9 @@ import org.pentaho.platform.dataaccess.dataset.DatasetPaths;
 import org.pentaho.platform.dataaccess.dataset.DatasetProblem;
 import org.pentaho.platform.dataaccess.dataset.DatasetUpgrades;
 import org.pentaho.platform.dataaccess.dataset.DatasetValidator;
+import org.pentaho.platform.dataaccess.dataset.source.Sample;
+import org.pentaho.platform.dataaccess.dataset.source.SourceAdapters;
+import org.pentaho.platform.dataaccess.dataset.source.SourceLimits;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -42,6 +45,7 @@ public class DatasetService {
   private final DatasetPermissions permissions;
   private final Supplier<String> currentUser;
   private final DatasetSharing sharing;
+  private final SourceAdapters sources;
   private final DatasetValidator validator = new DatasetValidator();
 
   /** With sharing kept by this service instance only; for tests and single-user tools. */
@@ -51,10 +55,16 @@ public class DatasetService {
 
   public DatasetService( DatasetStore store, DatasetPermissions permissions, Supplier<String> currentUser,
                          DatasetSharing sharing ) {
+    this( store, permissions, currentUser, sharing, SourceAdapters.none() );
+  }
+
+  public DatasetService( DatasetStore store, DatasetPermissions permissions, Supplier<String> currentUser,
+                         DatasetSharing sharing, SourceAdapters sources ) {
     this.store = store;
     this.permissions = permissions;
     this.currentUser = currentUser;
     this.sharing = sharing;
+    this.sources = sources;
   }
 
   /** Every dataset the caller may see, by name. */
@@ -129,6 +139,31 @@ public class DatasetService {
     requireVersion( expectedVersion );
     writable( id );
     store.delete( id, expectedVersion );
+  }
+
+  /**
+   * The first rows of the dataset's source, with its columns as the source reports them. Anyone who
+   * can see the dataset can sample it: the source is the one its managers defined.
+   *
+   * @param limit rows wanted, 1 to {@link SourceLimits#MAX_SAMPLE_ROWS}; null for {@link SourceLimits#DEFAULT_SAMPLE_ROWS}
+   * @param table for a TABLES source, which table; null for the first
+   */
+  public Sample sample( String id, Integer limit, String table ) {
+    requireView();
+    DatasetDefinition d = readable( id ).getDefinition();
+    int n = limit == null ? SourceLimits.DEFAULT_SAMPLE_ROWS : limit;
+    if ( n < 1 || n > SourceLimits.MAX_SAMPLE_ROWS ) {
+      throw new DatasetApiException( Code.INVALID_REQUEST, "limit", "limit must be between 1 and " + SourceLimits.MAX_SAMPLE_ROWS,
+        null, null );
+    }
+    List<DatasetProblem> problems = validator.validate( d ).stream()
+      .filter( p -> p.getPath().equals( "source" ) || p.getPath().startsWith( "source." ) )
+      .collect( Collectors.toList() );
+    if ( !problems.isEmpty() ) {
+      throw new DatasetApiException( Code.VALIDATION_FAILED, problems.get( 0 ).getPath(),
+        "The source can't be read yet: " + problems.get( 0 ), problems, null );
+    }
+    return sources.forSource( d.getSource() ).sample( d.getSource(), n, table );
   }
 
   /** Who the dataset is shared with. Anyone who can see the dataset can see this. */

@@ -33,6 +33,8 @@ public class DatasetApiException extends RuntimeException {
     INVALID_REQUEST( 400 ),
     /** The definition is readable but incomplete or inconsistent (422). */
     VALIDATION_FAILED( 422 ),
+    /** The dataset's source refused or failed: a SQL error, a timeout, an unreadable file (422). */
+    SOURCE_FAILED( 422 ),
     /** The caller may not do this (403). */
     FORBIDDEN( 403 ),
     NOT_FOUND( 404 ),

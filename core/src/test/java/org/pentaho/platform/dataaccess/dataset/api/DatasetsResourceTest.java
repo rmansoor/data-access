@@ -205,10 +205,11 @@ public class DatasetsResourceTest {
   @Test
   public void saysWhatIsNotBuiltYet() throws Exception {
     resource.create( CSV );
-    Response sample = resource.sample( "monthly-orders" );
-    assertEquals( 501, sample.getStatus() );
-    assertTrue( body( sample ).get( "message" ).asText().contains( "CWBA-62" ) );
-    assertEquals( 501, resource.publish( "monthly-orders" ).getStatus() );
+    // No source adapters are configured in this test.
+    assertEquals( 501, resource.sample( "monthly-orders", null, null ).getStatus() );
+    Response publish = resource.publish( "monthly-orders" );
+    assertEquals( 501, publish.getStatus() );
+    assertTrue( body( publish ).get( "message" ).asText().contains( "CWBA-63" ) );
     assertEquals( 404, resource.publish( "missing" ).getStatus() );
   }
 }

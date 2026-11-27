@@ -25,6 +25,7 @@ import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.EntityTag;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
@@ -177,14 +178,15 @@ public class DatasetsResource {
     } );
   }
 
-  /** Sample rows come from the source adapters (CWBA-62). */
+  /**
+   * The source's first rows: {@code {"columns": [{name, type, sourceType, nullable, table}], "rows": [[…]],
+   * "truncated": bool}}. {@code limit} is 1 to 1000 (100 by default); {@code table} picks a table of a
+   * TABLES source.
+   */
   @POST
   @Path( "{id}/sample" )
-  public Response sample( @PathParam( "id" ) String id ) {
-    return handle( () -> {
-      service.get().get( id );
-      throw new DatasetApiException( Code.NOT_IMPLEMENTED, "Sampling arrives with the source adapters (CWBA-62)" );
-    } );
+  public Response sample( @PathParam( "id" ) String id, @QueryParam( "limit" ) Integer limit, @QueryParam( "table" ) String table ) {
+    return handle( () -> Response.ok( mapper.writeValueAsString( service.get().sample( id, limit, table ) ) ).build() );
   }
 
   /** Publishing generates the metadata and Mondrian files (CWBA-63). */

@@ -168,10 +168,19 @@
       "post": {
         "tags": ["Datasets"],
         "operationId": "sampleDataset",
-        "summary": "Read sample rows from the dataset's source",
-        "description": "Not built yet: answers 501 until the source adapters (CWBA-62).",
+        "summary": "Read the first rows of the dataset's source",
+        "description": "Columns as the source reports them, and up to `limit` rows. SQL must be a single read-only query; it runs on a read-only connection in a transaction that is rolled back, with a 30-second timeout. Values are strings, numbers, booleans, ISO-8601 dates and timestamps, or null.",
+        "parameters": [
+          { "name": "limit", "in": "query", "required": false, "description": "Rows wanted, 1 to 1000", "schema": { "type": "integer", "minimum": 1, "maximum": 1000, "default": 100 } },
+          { "name": "table", "in": "query", "required": false, "description": "For a TABLES source, which of its tables (as listed in the definition); the first by default", "schema": { "type": "string" } }
+        ],
         "responses": {
+          "200": { "description": "The sample", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Sample" } } } },
+          "400": { "$ref": "#/components/responses/InvalidRequest" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
           "404": { "$ref": "#/components/responses/NotFound" },
+          "422": { "description": "`validation-failed`: the source isn't complete or its SQL isn't a single read-only query (`path` names the field). `source-failed`: the database or file refused or failed, or the query took too long.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "500": { "$ref": "#/components/responses/Internal" },
           "501": { "$ref": "#/components/responses/NotImplemented" }
         }
       }
@@ -271,6 +280,26 @@
           "updated": { "type": "string", "format": "date-time" }
         }
       },
+      "Sample": {
+        "type": "object",
+        "required": ["columns", "rows", "truncated"],
+        "properties": {
+          "columns": { "type": "array", "items": { "$ref": "#/components/schemas/SourceColumn" } },
+          "rows": { "type": "array", "items": { "type": "array", "items": { "type": ["string", "number", "boolean", "null"] } } },
+          "truncated": { "type": "boolean", "description": "The source has more rows than were returned" }
+        }
+      },
+      "SourceColumn": {
+        "type": "object",
+        "required": ["name", "type"],
+        "properties": {
+          "name": { "type": "string" },
+          "type": { "type": "string", "enum": ["STRING", "INTEGER", "DECIMAL", "BOOLEAN", "DATE", "TIMESTAMP"] },
+          "sourceType": { "type": "string", "description": "The database's type name, or for a file the detected format mask" },
+          "nullable": { "type": "boolean" },
+          "table": { "type": "string", "description": "For a TABLES source, the table the column belongs to" }
+        }
+      },
       "Validation": {
         "type": "object",
         "required": ["valid", "problems"],
@@ -312,7 +341,7 @@
         "properties": {
           "code": {
             "type": "string",
-            "enum": ["invalid-definition", "invalid-request", "validation-failed", "forbidden", "not-found", "already-exists", "stale-version", "version-required", "not-implemented", "internal"]
+            "enum": ["invalid-definition", "invalid-request", "validation-failed", "source-failed", "forbidden", "not-found", "already-exists", "stale-version", "version-required", "not-implemented", "internal"]
           },
           "message": { "type": "string" },
           "path": { "type": "string" },
