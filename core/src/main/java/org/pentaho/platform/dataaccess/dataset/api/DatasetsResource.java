@@ -189,6 +189,23 @@ public class DatasetsResource {
     return handle( () -> Response.ok( mapper.writeValueAsString( service.get().sample( id, limit, table ) ) ).build() );
   }
 
+  /**
+   * Loads a FILE source's uploaded file into a new table on the staging connection and points the
+   * dataset at it. Requires If-Match with the version last read; the response's ETag is the new
+   * version. Body: {@code {"connection", "table", "rows", "columns": [{sourceName, name, type, sqlType}],
+   * "warnings": […]}}.
+   */
+  @POST
+  @Path( "{id}/stage" )
+  public Response stage( @PathParam( "id" ) String id, @HeaderParam( HttpHeaders.IF_MATCH ) String ifMatch ) {
+    return handle( () -> {
+      DatasetService s = service.get();
+      DatasetService.Staging staged = s.stage( id, expected( s, id, ifMatch ) );
+      return Response.ok( mapper.writeValueAsString( staged.getTable() ) ).tag( etag( staged.getDataset() ) )
+        .type( MediaType.APPLICATION_JSON ).build();
+    } );
+  }
+
   /** Publishing generates the metadata and Mondrian files (CWBA-63). */
   @POST
   @Path( "{id}/publish" )

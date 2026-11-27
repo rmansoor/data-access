@@ -82,7 +82,54 @@ public class CsvSourceAdapter implements SourceAdapter {
 
   // ------------------------------------------------------------------------------------------------
 
+  /** A file with how to read it decided: given in the definition, or detected as the wizard does. */
+  static final class CsvFile {
+    final Path path;
+    final String encoding;
+    final String delimiter;
+    final String enclosure;
+    final int header;
+    final int detectLines;
+
+    CsvFile( Path path, String encoding, String delimiter, String enclosure, int header, int detectLines ) {
+      this.path = path;
+      this.encoding = encoding;
+      this.delimiter = delimiter;
+      this.enclosure = enclosure;
+      this.header = header;
+      this.detectLines = detectLines;
+    }
+  }
+
+  /** The columns detected from the first lines, and the Kettle metas that parse each column's text. */
+  static final class Detected {
+    final List<SourceColumn> columns;
+    final List<ValueMetaInterface> metas;
+
+    Detected( List<SourceColumn> columns, List<ValueMetaInterface> metas ) {
+      this.columns = columns;
+      this.metas = metas;
+    }
+  }
+
+  /** Receives each line's values; returns false to stop reading. */
+  @FunctionalInterface
+  interface LineHandler {
+    boolean line( List<String> values, long lineNumber );
+  }
+
   private Sample read( Source source, int limit ) {
+    CsvFile f = open( source );
+    try {
+      List<List<String>> lines = lines( f, Math.max( f.detectLines, f.header + limit + 1 ) );
+      return profile( lines, f, limit );
+    } catch ( IOException | KettleException e ) {
+      throw JdbcSourceSupport.failed( "The file could not be read: " + e.getMessage(), e );
+    }
+  }
+
+  /** Checks the file settings and decides what the definition leaves out. */
+  CsvFile open( Source source ) {
     FileSource f = source.getFile();
     if ( f == null ) {
       throw JdbcSourceSupport.invalid( FILE, "is required" );
@@ -105,18 +152,34 @@ public class CsvSourceAdapter implements SourceAdapter {
       int detectLines = Math.max( limits.getTypeDetectionRows(), header + 1 );
       String delimiter = blank( f.getDelimiter() ) ? guessDelimiter( path, encoding, detectLines ) : f.getDelimiter();
       String enclosure = f.getEnclosure() == null ? "\"" : f.getEnclosure();
-      List<List<String>> lines = lines( path, encoding, delimiter, enclosure, Math.max( detectLines, header + limit + 1 ) );
-      return profile( lines, header, detectLines, limit );
-    } catch ( IOException | KettleException e ) {
+      return new CsvFile( path, encoding, delimiter, enclosure, header, detectLines );
+    } catch ( IOException e ) {
       throw JdbcSourceSupport.failed( "The file could not be read: " + e.getMessage(), e );
     }
   }
 
-  private static Sample profile( List<List<String>> lines, int header, int detectLines, int limit ) {
-    int width = lines.stream().mapToInt( List::size ).max().orElse( 0 );
-    List<String> headings = header > 0 && !lines.isEmpty() ? lines.get( 0 ) : List.of();
-    List<List<String>> data = lines.subList( Math.min( header, lines.size() ), lines.size() );
-    List<List<String>> window = data.subList( 0, Math.min( data.size(), Math.max( 0, detectLines - header ) ) );
+  private static Sample profile( List<List<String>> lines, CsvFile f, int limit ) {
+    Detected detected = detect( lines, f );
+    List<List<String>> data = lines.subList( Math.min( f.header, lines.size() ), lines.size() );
+    int width = detected.columns.size();
+    List<List<Object>> rows = new ArrayList<>();
+    for ( int r = 0; r < Math.min( limit, data.size() ); r++ ) {
+      List<String> raw = data.get( r );
+      List<Object> row = new ArrayList<>( width );
+      for ( int c = 0; c < width; c++ ) {
+        row.add( value( c < raw.size() ? raw.get( c ) : null, detected.metas.get( c ), detected.columns.get( c ).getType() ) );
+      }
+      rows.add( row );
+    }
+    return new Sample( detected.columns, rows, data.size() > limit );
+  }
+
+  /** Column names and types from the file's first lines (the header, if any, and the detection window). */
+  static Detected detect( List<List<String>> lines, CsvFile f ) {
+    int width = lines.stream().limit( f.detectLines ).mapToInt( List::size ).max().orElse( 0 );
+    List<String> headings = f.header > 0 && !lines.isEmpty() ? lines.get( 0 ) : List.of();
+    List<List<String>> data = lines.subList( Math.min( f.header, lines.size() ), lines.size() );
+    List<List<String>> window = data.subList( 0, Math.min( data.size(), Math.max( 0, f.detectLines - f.header ) ) );
 
     DecimalFormat df = new DecimalFormat( "000" );
     List<SourceColumn> columns = new ArrayList<>();
@@ -132,17 +195,7 @@ public class CsvSourceAdapter implements SourceAdapter {
       String name = blank( heading ) ? CsvFileInfo.DEFAULT_COLUMN_NAME_PREFIX + df.format( c + 1 ) : heading;
       columns.add( new SourceColumn( name, columnType( meta ), meta.getConversionMask(), null, null ) );
     }
-
-    List<List<Object>> rows = new ArrayList<>();
-    for ( int r = 0; r < Math.min( limit, data.size() ); r++ ) {
-      List<String> raw = data.get( r );
-      List<Object> row = new ArrayList<>( width );
-      for ( int c = 0; c < width; c++ ) {
-        row.add( value( c < raw.size() ? raw.get( c ) : null, metas.get( c ), columns.get( c ).getType() ) );
-      }
-      rows.add( row );
-    }
-    return new Sample( columns, rows, data.size() > limit );
+    return new Detected( columns, metas );
   }
 
   static ColumnType columnType( ValueMetaInterface meta ) {
@@ -165,56 +218,77 @@ public class CsvSourceAdapter implements SourceAdapter {
 
   /** The text parsed as detection decided, or the text itself if a later row doesn't fit. */
   private static Object value( String text, ValueMetaInterface meta, ColumnType type ) {
+    try {
+      return parse( text, meta, type );
+    } catch ( KettleException | RuntimeException e ) {
+      return text;
+    }
+  }
+
+  /**
+   * The text as the detected type: Long, BigDecimal, Boolean, or an ISO date or timestamp string.
+   * Null for null or empty text (and the text itself for STRING columns).
+   *
+   * @throws KettleException or a RuntimeException when the text doesn't fit the type
+   */
+  static Object parse( String text, ValueMetaInterface meta, ColumnType type ) throws KettleException {
     if ( text == null || type == ColumnType.STRING ) {
       return text;
     }
     if ( text.isEmpty() ) {
       return null;
     }
-    try {
-      // The text, described with the detected mask and symbols, converted to the detected type. Built
-      // directly rather than through ValueMetaFactory, which needs Kettle's plugin registry.
-      ValueMetaString asText = new ValueMetaString( "value" );
-      asText.setConversionMask( meta.getConversionMask() );
-      asText.setDecimalSymbol( meta.getDecimalSymbol() );
-      asText.setGroupingSymbol( meta.getGroupingSymbol() );
-      Object v = meta.convertData( asText, text );
-      if ( v instanceof Double ) {
-        return BigDecimal.valueOf( (Double) v );
-      }
-      if ( v instanceof Date ) {
-        Timestamp t = new Timestamp( ( (Date) v ).getTime() );
-        return type == ColumnType.DATE ? t.toLocalDateTime().toLocalDate().toString() : t.toLocalDateTime().toString();
-      }
-      return v;
-    } catch ( KettleException | RuntimeException e ) {
-      return text;
+    // The text, described with the detected mask and symbols, converted to the detected type. Built
+    // directly rather than through ValueMetaFactory, which needs Kettle's plugin registry.
+    ValueMetaString asText = new ValueMetaString( "value" );
+    asText.setConversionMask( meta.getConversionMask() );
+    asText.setDecimalSymbol( meta.getDecimalSymbol() );
+    asText.setGroupingSymbol( meta.getGroupingSymbol() );
+    Object v = meta.convertData( asText, text );
+    if ( v instanceof Double ) {
+      return BigDecimal.valueOf( (Double) v );
     }
+    if ( v instanceof Date ) {
+      Timestamp t = new Timestamp( ( (Date) v ).getTime() );
+      return type == ColumnType.DATE ? t.toLocalDateTime().toLocalDate().toString() : t.toLocalDateTime().toString();
+    }
+    return v;
   }
 
-  private static List<List<String>> lines( Path path, String encoding, String delimiter, String enclosure, int max )
-    throws IOException, KettleException {
-    int fileType = new CsvInspector().determineFileFormat( firstLine( path, encoding ) );
+  private static List<List<String>> lines( CsvFile f, int max ) throws IOException, KettleException {
     List<List<String>> lines = new ArrayList<>();
-    try ( InputStream in = BOMInputStream.builder().setInputStream( Files.newInputStream( path ) ).get();
-          BufferedInputStreamReader reader = new BufferedInputStreamReader( new InputStreamReader( in, encoding ) ) ) {
+    eachLine( f, ( values, n ) -> {
+      lines.add( values );
+      return lines.size() < max;
+    } );
+    return lines;
+  }
+
+  /** Reads the file line by line, header included, without holding it in memory. */
+  static void eachLine( CsvFile f, LineHandler handler ) throws IOException, KettleException {
+    int fileType = new CsvInspector().determineFileFormat( firstLine( f.path, f.encoding ) );
+    try ( InputStream in = BOMInputStream.builder().setInputStream( Files.newInputStream( f.path ) ).get();
+          BufferedInputStreamReader reader = new BufferedInputStreamReader( new InputStreamReader( in, f.encoding ) ) ) {
       StringBuilder buffer = new StringBuilder( 1000 );
-      for ( String line = TextFileInputUtils.getLine( null, reader, fileType, buffer ); line != null && lines.size() < max;
+      long n = 0;
+      for ( String line = TextFileInputUtils.getLine( null, reader, fileType, buffer ); line != null;
             line = TextFileInputUtils.getLine( null, reader, fileType, buffer ) ) {
+        n++;
         List<String> tokens = new ArrayList<>();
         try {
-          CSVTokenizer t = new CSVTokenizer( line, delimiter, enclosure );
+          CSVTokenizer t = new CSVTokenizer( line, f.delimiter, f.enclosure );
           while ( t.hasMoreTokens() ) {
             String token = t.nextToken();
             tokens.add( token == null ? null : token.trim() );
           }
         } catch ( IllegalArgumentException e ) {
-          throw JdbcSourceSupport.failed( "Line " + ( lines.size() + 1 ) + " of the file can't be read: " + e.getMessage(), e );
+          throw JdbcSourceSupport.failed( "Line " + n + " of the file can't be read: " + e.getMessage(), e );
         }
-        lines.add( tokens );
+        if ( !handler.line( tokens, n ) ) {
+          return;
+        }
       }
     }
-    return lines;
   }
 
   /** The first line with its line ending, which tells DOS files from Unix ones. */

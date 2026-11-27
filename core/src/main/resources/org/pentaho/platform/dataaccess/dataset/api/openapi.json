@@ -185,6 +185,27 @@
         }
       }
     },
+    "/data-access/api/v2/datasets/{id}/stage": {
+      "parameters": [{ "$ref": "#/components/parameters/Id" }],
+      "post": {
+        "tags": ["Datasets"],
+        "operationId": "stageDataset",
+        "summary": "Load the dataset's uploaded file into a staging table",
+        "description": "For a FILE source only. Reads the whole file and checks every value against the type detected from its first lines; a column with a value that doesn't fit is loaded as text and reported in `warnings`. Then creates a new table on the staging connection (`data-access-staging-jndi`), loads every row in one transaction, and points the dataset at it (`source.connection`, `source.file.stagingTable`). The table the dataset used before is dropped. If the load fails, the dataset is unchanged.",
+        "parameters": [{ "$ref": "#/components/parameters/IfMatch" }],
+        "responses": {
+          "200": { "description": "Loaded", "headers": { "ETag": { "$ref": "#/components/headers/ETag" } }, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/StagedTable" } } } },
+          "400": { "$ref": "#/components/responses/InvalidRequest" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "412": { "$ref": "#/components/responses/StaleVersion" },
+          "422": { "description": "`validation-failed`: the file settings aren't complete, or `source.connection` names a connection other than the staging one. `source-failed`: the file couldn't be read or has too many rows, or the staging database refused the load.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "428": { "$ref": "#/components/responses/VersionRequired" },
+          "500": { "$ref": "#/components/responses/Internal" },
+          "501": { "$ref": "#/components/responses/NotImplemented" }
+        }
+      }
+    },
     "/data-access/api/v2/datasets/{id}/publish": {
       "parameters": [{ "$ref": "#/components/parameters/Id" }],
       "post": {
@@ -298,6 +319,27 @@
           "sourceType": { "type": "string", "description": "The database's type name, or for a file the detected format mask" },
           "nullable": { "type": "boolean" },
           "table": { "type": "string", "description": "For a TABLES source, the table the column belongs to" }
+        }
+      },
+      "StagedTable": {
+        "type": "object",
+        "required": ["connection", "table", "rows", "columns", "warnings"],
+        "properties": {
+          "connection": { "type": "string", "description": "The staging connection" },
+          "table": { "type": "string", "description": "The new table, as `schema.table` when a staging schema is set" },
+          "rows": { "type": "integer", "minimum": 0 },
+          "columns": { "type": "array", "items": { "$ref": "#/components/schemas/StagedColumn" } },
+          "warnings": { "type": "array", "items": { "type": "string" }, "description": "What was loaded differently from what was detected; at most 20" }
+        }
+      },
+      "StagedColumn": {
+        "type": "object",
+        "required": ["sourceName", "name", "type", "sqlType"],
+        "properties": {
+          "sourceName": { "type": "string", "description": "The column's name in the file" },
+          "name": { "type": "string", "description": "The column's name in the table: letters, digits and underscores" },
+          "type": { "type": "string", "enum": ["STRING", "INTEGER", "DECIMAL", "BOOLEAN", "DATE", "TIMESTAMP"] },
+          "sqlType": { "type": "string", "description": "The type the column was created with, in the staging database's terms" }
         }
       },
       "Validation": {

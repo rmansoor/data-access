@@ -207,6 +207,8 @@ public class DatasetsResourceTest {
     resource.create( CSV );
     // No source adapters are configured in this test.
     assertEquals( 501, resource.sample( "monthly-orders", null, null ).getStatus() );
+    assertEquals( "loading needs the version", 428, resource.stage( "monthly-orders", null ).getStatus() );
+    assertEquals( 501, resource.stage( "monthly-orders", "*" ).getStatus() );
     Response publish = resource.publish( "monthly-orders" );
     assertEquals( 501, publish.getStatus() );
     assertTrue( body( publish ).get( "message" ).asText().contains( "CWBA-63" ) );

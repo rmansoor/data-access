@@ -13,11 +13,19 @@
 package org.pentaho.platform.dataaccess.dataset.service;
 
 import org.pentaho.platform.dataaccess.dataset.DatasetDefinition;
+import org.pentaho.platform.dataaccess.dataset.DatasetJson;
 import org.pentaho.platform.dataaccess.dataset.DatasetPaths;
 import org.pentaho.platform.dataaccess.dataset.DatasetProblem;
 import org.pentaho.platform.dataaccess.dataset.DatasetUpgrades;
 import org.pentaho.platform.dataaccess.dataset.DatasetValidator;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+import org.pentaho.platform.dataaccess.dataset.DatasetDefinition.FileSource;
+import org.pentaho.platform.dataaccess.dataset.DatasetDefinition.Source;
+import org.pentaho.platform.dataaccess.dataset.DatasetDefinition.SourceType;
+import org.pentaho.platform.dataaccess.dataset.source.CsvStager;
 import org.pentaho.platform.dataaccess.dataset.source.Sample;
+import org.pentaho.platform.dataaccess.dataset.source.StagedTable;
 import org.pentaho.platform.dataaccess.dataset.source.SourceAdapters;
 import org.pentaho.platform.dataaccess.dataset.source.SourceLimits;
 
@@ -40,6 +48,7 @@ import static org.pentaho.platform.dataaccess.dataset.service.DatasetApiExceptio
 public class DatasetService {
 
   static final int MAX_GENERATED_ID = 60;
+  private static final Log LOG = LogFactory.getLog( DatasetService.class );
 
   private final DatasetStore store;
   private final DatasetPermissions permissions;
@@ -47,6 +56,7 @@ public class DatasetService {
   private final DatasetSharing sharing;
   private final SourceAdapters sources;
   private final DatasetValidator validator = new DatasetValidator();
+  private final DatasetJson json = new DatasetJson();
 
   /** With sharing kept by this service instance only; for tests and single-user tools. */
   public DatasetService( DatasetStore store, DatasetPermissions permissions, Supplier<String> currentUser ) {
@@ -137,8 +147,12 @@ public class DatasetService {
     requireManage();
     requireValidId( id, "" );
     requireVersion( expectedVersion );
-    writable( id );
+    DatasetDefinition d = writable( id ).getDefinition();
     store.delete( id, expectedVersion );
+    String staged = stagedTable( d );
+    if ( staged != null && sources.canStage() ) {
+      sources.stager().drop( d.getSource().getConnection(), staged );
+    }
   }
 
   /**
@@ -156,14 +170,74 @@ public class DatasetService {
       throw new DatasetApiException( Code.INVALID_REQUEST, "limit", "limit must be between 1 and " + SourceLimits.MAX_SAMPLE_ROWS,
         null, null );
     }
-    List<DatasetProblem> problems = validator.validate( d ).stream()
-      .filter( p -> p.getPath().equals( "source" ) || p.getPath().startsWith( "source." ) )
-      .collect( Collectors.toList() );
-    if ( !problems.isEmpty() ) {
-      throw new DatasetApiException( Code.VALIDATION_FAILED, problems.get( 0 ).getPath(),
-        "The source can't be read yet: " + problems.get( 0 ), problems, null );
-    }
+    requireReadableSource( d );
     return sources.forSource( d.getSource() ).sample( d.getSource(), n, table );
+  }
+
+  /** A dataset after its file was loaded, and the table it was loaded into. */
+  public static final class Staging {
+    private final StoredDataset dataset;
+    private final StagedTable table;
+
+    Staging( StoredDataset dataset, StagedTable table ) {
+      this.dataset = dataset;
+      this.table = table;
+    }
+
+    public StoredDataset getDataset() {
+      return dataset;
+    }
+
+    public StagedTable getTable() {
+      return table;
+    }
+  }
+
+  /**
+   * Loads the dataset's uploaded file into a new table on the staging connection and points the
+   * dataset at it ({@code source.file.stagingTable}, {@code source.connection}); the table it used
+   * before is dropped. Needs the version the caller read, as an update does, since the definition
+   * changes.
+   */
+  public Staging stage( String id, String expectedVersion ) {
+    requireManage();
+    requireValidId( id, "" );
+    requireVersion( expectedVersion );
+    StoredDataset current = writable( id );
+    if ( !current.getVersion().equals( expectedVersion ) ) {
+      throw new DatasetApiException( Code.STALE_VERSION, "The dataset changed since it was read; read it again before loading" );
+    }
+    DatasetDefinition d = json.read( json.write( current.getDefinition() ) );
+    Source source = d.getSource();
+    if ( source == null || source.getType() != SourceType.FILE ) {
+      throw new DatasetApiException( Code.INVALID_REQUEST, "source.type", "Only FILE sources are loaded into staging tables",
+        null, null );
+    }
+    requireReadableSource( d );
+    CsvStager stager = sources.stager();
+    String connection = stager.connection();
+    if ( source.getConnection() != null && !source.getConnection().trim().isEmpty()
+      && !source.getConnection().trim().equals( connection ) ) {
+      String why = "must be the staging connection (\"" + connection + "\") or left out; uploaded files are loaded only there";
+      throw new DatasetApiException( Code.VALIDATION_FAILED, "source.connection", "The source's connection " + why,
+        List.of( new DatasetProblem( "source.connection", why ) ), null );
+    }
+    String previous = stagedTable( d );
+    StagedTable table = stager.stage( id, source );
+    source.setConnection( connection );
+    source.getFile().setStagingTable( table.getTable() );
+    StoredDataset updated;
+    try {
+      updated = store.update( d, expectedVersion );
+    } catch ( RuntimeException e ) {
+      stager.drop( connection, table.getTable() );
+      throw e;
+    }
+    if ( previous != null && !previous.equals( table.getTable() ) ) {
+      stager.drop( connection, previous );
+    }
+    LOG.debug( "Dataset " + id + " loaded " + table.getRows() + " rows into " + table.getTable() );
+    return new Staging( updated, table );
   }
 
   /** Who the dataset is shared with. Anyone who can see the dataset can see this. */
@@ -205,6 +279,23 @@ public class DatasetService {
   }
 
   // ------------------------------------------------------------------------------------------------
+
+  private void requireReadableSource( DatasetDefinition d ) {
+    List<DatasetProblem> problems = validator.validate( d ).stream()
+      .filter( p -> p.getPath().equals( "source" ) || p.getPath().startsWith( "source." ) )
+      .collect( Collectors.toList() );
+    if ( !problems.isEmpty() ) {
+      throw new DatasetApiException( Code.VALIDATION_FAILED, problems.get( 0 ).getPath(),
+        "The source can't be read yet: " + problems.get( 0 ), problems, null );
+    }
+  }
+
+  private static String stagedTable( DatasetDefinition d ) {
+    Source s = d.getSource();
+    FileSource f = s == null || s.getType() != SourceType.FILE ? null : s.getFile();
+    String table = f == null ? null : f.getStagingTable();
+    return table == null || table.trim().isEmpty() ? null : table;
+  }
 
   /** The dataset, if the caller may see it; otherwise NOT_FOUND, so its existence isn't revealed. */
   private StoredDataset readable( String id ) {
