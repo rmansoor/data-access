@@ -207,8 +207,10 @@ public class DatasetsResourceTest {
     resource.create( CSV );
     // No source adapters are configured in this test.
     assertEquals( 501, resource.sample( "monthly-orders", null, null ).getStatus() );
-    assertEquals( "loading needs the version", 428, resource.stage( "monthly-orders", null ).getStatus() );
-    assertEquals( 501, resource.stage( "monthly-orders", "*" ).getStatus() );
+    assertEquals( "loading needs the version", 428, resource.stage( "monthly-orders", null, false ).getStatus() );
+    assertEquals( 501, resource.stage( "monthly-orders", "*", false ).getStatus() );
+    assertEquals( 501, resource.stage( "monthly-orders", "*", true ).getStatus() );
+    assertEquals( 404, resource.loadStatus( "monthly-orders" ).getStatus() );
     java.io.InputStream body = new java.io.ByteArrayInputStream( "a\n1\n".getBytes( java.nio.charset.StandardCharsets.UTF_8 ) );
     assertEquals( "uploading needs the version", 428, resource.uploadFile( "monthly-orders", null, "a.csv", body ).getStatus() );
     assertEquals( 501, resource.uploadFile( "monthly-orders", "*", "a.csv", body ).getStatus() );

@@ -272,6 +272,41 @@ public class CsvStagerTest {
     assertTrue( CsvStager.isOwnTable( id, "DS_MONTHLY_ORDERS_BY_MOKX3K2O" ) );
   }
 
+  @Test
+  public void stopsWhenCancelledWhileLoadingAndLeavesNoTable() throws Exception {
+    StringBuilder csv = new StringBuilder( "x\n" );
+    for ( int i = 0; i < CsvStager.BATCH * 3; i++ ) {
+      csv.append( i ).append( '\n' );
+    }
+    Source s = file( "big.csv", csv.toString() );
+    long[] seen = { 0, 0 };
+    CsvStager.Progress stopAfterFirstBatch = new CsvStager.Progress() {
+      @Override
+      public void read( long rows ) {
+        seen[ 0 ] = rows;
+      }
+
+      @Override
+      public void loaded( long rows ) {
+        seen[ 1 ] = rows;
+      }
+
+      @Override
+      public boolean cancelled() {
+        return seen[ 1 ] > 0;
+      }
+    };
+    try {
+      stager().stage( "big", s, List.of(), stopAfterFirstBatch );
+      fail( "not cancelled" );
+    } catch ( CsvStager.Cancelled expected ) {
+      // stopped
+    }
+    assertEquals( CsvStager.BATCH * 2, seen[ 0 ] );
+    assertEquals( CsvStager.BATCH, seen[ 1 ] );
+    assertTrue( tables().isEmpty() );
+  }
+
   private static DatasetApiException expect( Code code, Runnable call ) {
     try {
       call.run();

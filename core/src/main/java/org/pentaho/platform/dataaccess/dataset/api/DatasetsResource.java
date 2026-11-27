@@ -216,13 +216,38 @@ public class DatasetsResource {
    */
   @POST
   @Path( "{id}/stage" )
-  public Response stage( @PathParam( "id" ) String id, @HeaderParam( HttpHeaders.IF_MATCH ) String ifMatch ) {
+  public Response stage( @PathParam( "id" ) String id, @HeaderParam( HttpHeaders.IF_MATCH ) String ifMatch,
+                         @QueryParam( "async" ) boolean async ) {
     return handle( () -> {
       DatasetService s = service.get();
+      if ( async ) {
+        // 202 with the job; follow it at GET .../stage, stop it with DELETE .../stage.
+        return Response.accepted( mapper.writeValueAsString( s.startLoad( id, expected( s, id, ifMatch ) ) ) )
+          .type( MediaType.APPLICATION_JSON ).build();
+      }
       DatasetService.Staging staged = s.stage( id, expected( s, id, ifMatch ) );
       return Response.ok( mapper.writeValueAsString( staged.getTable() ) ).tag( etag( staged.getDataset() ) )
         .type( MediaType.APPLICATION_JSON ).build();
     } );
+  }
+
+  /**
+   * The dataset's running or last background load: {@code {"id", "state": RUNNING|SUCCEEDED|FAILED|CANCELLED,
+   * "rowsRead", "rowsLoaded", "started", "finished", "table", "version", "error"}}. 404 when there
+   * has been none since the server started.
+   */
+  @GET
+  @Path( "{id}/stage" )
+  public Response loadStatus( @PathParam( "id" ) String id ) {
+    return handle( () -> Response.ok( mapper.writeValueAsString( service.get().loadStatus( id ) ) ).build() );
+  }
+
+  /** Asks the running background load to stop; it stops within the next thousand rows and leaves nothing behind. */
+  @DELETE
+  @Path( "{id}/stage" )
+  public Response cancelLoad( @PathParam( "id" ) String id ) {
+    return handle( () -> Response.accepted( mapper.writeValueAsString( service.get().cancelLoad( id ) ) )
+      .type( MediaType.APPLICATION_JSON ).build() );
   }
 
   /** Publishing generates the metadata and Mondrian files (CWBA-63). */

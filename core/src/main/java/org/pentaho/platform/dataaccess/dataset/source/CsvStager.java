@@ -110,8 +110,41 @@ public class CsvStager {
    * type the user chose. Other columns use the detected type.
    */
   public StagedTable stage( String datasetId, Source source, List<Column> columns ) {
+    return stage( datasetId, source, columns, Progress.NONE );
+  }
+
+  /** Told how far a load has got, every thousand rows, and asked whether to stop. */
+  public interface Progress {
+    Progress NONE = new Progress() {
+    };
+
+    /** Rows checked in the first pass. */
+    default void read( long rows ) {
+    }
+
+    /** Rows inserted in the second pass. */
+    default void loaded( long rows ) {
+    }
+
+    /** True to stop: the load ends with {@link Cancelled} and leaves nothing behind. */
+    default boolean cancelled() {
+      return false;
+    }
+  }
+
+  /** A load stopped because {@link Progress#cancelled()} said so. */
+  public static final class Cancelled extends RuntimeException {
+    private static final long serialVersionUID = 1L;
+
+    public Cancelled() {
+      super( "The load was cancelled" );
+    }
+  }
+
+  /** As {@link #stage(String, Source, List)}, reporting to {@code progress} and stopping when it asks. */
+  public StagedTable stage( String datasetId, Source source, List<Column> columns, Progress progress ) {
     CsvSourceAdapter.CsvFile file = csv.open( source );
-    Profile profile = profile( file, columns == null ? List.of() : columns );
+    Profile profile = profile( file, columns == null ? List.of() : columns, progress );
     String connection = connection();
     try ( Connection c = open( connection ) ) {
       boolean autoCommit = c.getAutoCommit();
@@ -168,6 +201,7 @@ public class CsvStager {
     final long[] misfits;
     final String[] firstMisfit;
     final List<String> warnings = new ArrayList<>();
+    Progress progress = Progress.NONE;
     long rows;
     long wideLines;
 
@@ -212,7 +246,7 @@ public class CsvStager {
     }
   }
 
-  private Profile profile( CsvSourceAdapter.CsvFile file, List<Column> columns ) {
+  private Profile profile( CsvSourceAdapter.CsvFile file, List<Column> columns, Progress progress ) {
     try {
       List<List<String>> head = new ArrayList<>();
       CsvSourceAdapter.eachLine( file, ( values, n ) -> {
@@ -224,9 +258,16 @@ public class CsvStager {
         throw JdbcSourceSupport.invalid( CsvSourceAdapter.FILE + ".path", "names an empty file" );
       }
       p.choose( columns );
+      p.progress = progress;
       CsvSourceAdapter.eachLine( file, ( values, n ) -> {
         if ( n <= file.header ) {
           return true;
+        }
+        if ( p.rows % BATCH == 0 ) {
+          progress.read( p.rows );
+          if ( progress.cancelled() ) {
+            throw new Cancelled();
+          }
         }
         if ( ++p.rows > maxRows ) {
           throw JdbcSourceSupport.failed( "The file has more than " + maxRows + " rows, the most this server loads", null );
@@ -425,6 +466,10 @@ public class CsvStager {
           ps.addBatch();
           if ( ++rows[ 0 ] % BATCH == 0 ) {
             ps.executeBatch();
+            p.progress.loaded( rows[ 0 ] );
+            if ( p.progress.cancelled() ) {
+              throw new Cancelled();
+            }
           }
           return true;
         } catch ( SQLException e ) {

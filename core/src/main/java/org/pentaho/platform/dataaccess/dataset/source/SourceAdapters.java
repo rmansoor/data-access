@@ -33,6 +33,8 @@ public final class SourceAdapters {
   private final CsvStager stager;
   private final DatasetFiles files;
   private StagingConfig staging;
+  private final org.pentaho.platform.dataaccess.dataset.service.StagingJobs jobs =
+    new org.pentaho.platform.dataaccess.dataset.service.StagingJobs();
 
   public SourceAdapters( List<SourceAdapter> adapters ) {
     this( adapters, null );
@@ -134,6 +136,11 @@ public final class SourceAdapters {
     this.staging = staging;
     this.connections = connections;
     return this;
+  }
+
+  /** Loads running in the background; shared by every request this instance serves. */
+  public org.pentaho.platform.dataaccess.dataset.service.StagingJobs jobs() {
+    return jobs;
   }
 
   /** Where files are loaded: saved settings, else settings.xml. */

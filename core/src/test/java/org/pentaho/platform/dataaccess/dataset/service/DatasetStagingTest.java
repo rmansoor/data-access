@@ -379,6 +379,25 @@ public class DatasetStagingTest {
     assertEquals( "back to settings.xml", "Staging", service.getStaging().getConnection() );
   }
 
+  @Test
+  public void loadsInTheBackgroundAndReportsTheOutcome() throws Exception {
+    StoredDataset v1 = create( "Orders", csv( "orders.csv" ) );
+    expect( Code.NOT_FOUND, () -> service.loadStatus( "orders" ) );
+    StagingJobs.Job job = service.startLoad( "orders", v1.getVersion() );
+    for ( int i = 0; i < 500 && job.getState() == StagingJobs.State.RUNNING; i++ ) {
+      Thread.sleep( 10 );
+    }
+    assertEquals( StagingJobs.State.SUCCEEDED, job.getState() );
+    assertEquals( 2, job.getTable().getRows() );
+    StoredDataset now = service.get( "orders" );
+    assertEquals( "the job reports the dataset's new version", now.getVersion(), job.getVersion() );
+    assertEquals( job.getTable().getTable(), now.getDefinition().getSource().getFile().getStagingTable() );
+    assertEquals( job, service.loadStatus( "orders" ) );
+
+    // The checks happen before the job starts.
+    expect( Code.STALE_VERSION, () -> service.startLoad( "orders", v1.getVersion() ) );
+  }
+
   private static DatasetApiException expect( Code code, Runnable call ) {
     try {
       call.run();

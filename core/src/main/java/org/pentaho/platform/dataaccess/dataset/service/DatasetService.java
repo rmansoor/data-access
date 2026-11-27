@@ -33,12 +33,16 @@ import org.pentaho.platform.dataaccess.dataset.source.TableList;
 import org.pentaho.platform.dataaccess.dataset.source.SourceAdapters;
 import org.pentaho.platform.dataaccess.dataset.source.SourceLimits;
 
+import org.pentaho.platform.api.engine.IPentahoSession;
+import org.pentaho.platform.engine.core.system.PentahoSessionHolder;
+
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -348,6 +352,73 @@ public class DatasetService {
    * changes.
    */
   public Staging stage( String id, String expectedVersion ) {
+    PreparedLoad load = prepareLoad( id, expectedVersion );
+    return performLoad( load, CsvStager.Progress.NONE );
+  }
+
+  /**
+   * As {@link #stage}, in the background: the checks happen now (permission, version, source),
+   * the load on a worker. Follow it with {@link #loadStatus}; stop it with {@link #cancelLoad}.
+   * One load per dataset at a time (ALREADY_EXISTS otherwise).
+   */
+  public StagingJobs.Job startLoad( String id, String expectedVersion ) {
+    PreparedLoad load = prepareLoad( id, expectedVersion );
+    IPentahoSession session = PentahoSessionHolder.getSession();
+    return sources.jobs().start( id, progress -> {
+      // The worker acts for the caller who started it.
+      PentahoSessionHolder.setSession( session );
+      try {
+        Staging done = performLoad( load, progress );
+        return Map.entry( done.getTable(), done.getDataset().getVersion() );
+      } finally {
+        PentahoSessionHolder.removeSession();
+      }
+    } );
+  }
+
+  /** The dataset's running or last background load; NOT_FOUND when there has been none since the server started. */
+  public StagingJobs.Job loadStatus( String id ) {
+    requireView();
+    readable( id );
+    StagingJobs.Job job = sources.jobs().last( id );
+    if ( job == null ) {
+      throw new DatasetApiException( Code.NOT_FOUND, "This dataset hasn't been loaded in the background since the server started" );
+    }
+    return job;
+  }
+
+  /** Asks the dataset's running background load to stop. */
+  public StagingJobs.Job cancelLoad( String id ) {
+    requireManage();
+    writable( id );
+    StagingJobs.Job job = sources.jobs().cancel( id );
+    if ( job == null ) {
+      throw new DatasetApiException( Code.NOT_FOUND, "No load of this dataset is running" );
+    }
+    return job;
+  }
+
+  /** A load that passed its checks: what to load, and the table it replaces. */
+  private static final class PreparedLoad {
+    final String id;
+    final String expectedVersion;
+    final DatasetDefinition definition;
+    final CsvStager stager;
+    final String previousConnection;
+    final String previous;
+
+    PreparedLoad( String id, String expectedVersion, DatasetDefinition definition, CsvStager stager, String previousConnection,
+                  String previous ) {
+      this.id = id;
+      this.expectedVersion = expectedVersion;
+      this.definition = definition;
+      this.stager = stager;
+      this.previousConnection = previousConnection;
+      this.previous = previous;
+    }
+  }
+
+  private PreparedLoad prepareLoad( String id, String expectedVersion ) {
     requireManage();
     requireValidId( id, "" );
     requireVersion( expectedVersion );
@@ -363,25 +434,30 @@ public class DatasetService {
     }
     requireReadableSource( d );
     CsvStager stager = sources.stager();
-    // Always the current staging connection; source.connection is where the server put the last
-    // load (clients can't set it), which is where the previous table is dropped from.
-    String connection = stager.connection();
-    String previousConnection = source.getConnection();
-    String previous = stagedTable( d );
-    StagedTable table = stager.stage( id, source, d.getColumns() );
+    stager.connection(); // fails now, not on the worker, when no staging connection is configured
+    // source.connection is where the server put the last load (clients can't set it): the previous table is dropped there.
+    return new PreparedLoad( id, expectedVersion, d, stager, source.getConnection(), stagedTable( d ) );
+  }
+
+  /** Loads into the current staging connection, points the dataset at the new table, and drops the one it replaces. */
+  private Staging performLoad( PreparedLoad load, CsvStager.Progress progress ) {
+    DatasetDefinition d = load.definition;
+    Source source = d.getSource();
+    String connection = load.stager.connection();
+    StagedTable table = load.stager.stage( load.id, source, d.getColumns(), progress );
     source.setConnection( connection );
     source.getFile().setStagingTable( table.getTable() );
     StoredDataset updated;
     try {
-      updated = store.update( d, expectedVersion );
+      updated = store.update( d, load.expectedVersion );
     } catch ( RuntimeException e ) {
-      stager.drop( id, connection, table.getTable() );
+      load.stager.drop( load.id, connection, table.getTable() );
       throw e;
     }
-    if ( previous != null && !( previous.equals( table.getTable() ) && connection.equals( previousConnection ) ) ) {
-      stager.drop( id, previousConnection, previous );
+    if ( load.previous != null && !( load.previous.equals( table.getTable() ) && connection.equals( load.previousConnection ) ) ) {
+      load.stager.drop( load.id, load.previousConnection, load.previous );
     }
-    LOG.debug( "Dataset " + id + " loaded " + table.getRows() + " rows into " + table.getTable() );
+    LOG.debug( "Dataset " + load.id + " loaded " + table.getRows() + " rows into " + table.getTable() );
     return new Staging( updated, table );
   }
 

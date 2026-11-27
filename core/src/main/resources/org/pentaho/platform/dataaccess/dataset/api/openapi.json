@@ -218,17 +218,46 @@
         "operationId": "stageDataset",
         "summary": "Load the dataset's uploaded file into a staging table",
         "description": "For a FILE source only. Reads the whole file and checks every value against the type detected from its first lines; a column with a value that doesn't fit is loaded as text and reported in `warnings`. Then creates a new table on the staging connection (`data-access-staging-jndi`), loads every row in one transaction, and points the dataset at it. Columns the definition lists are loaded as the type it gives them (values that don't fit load as empty and are counted in `warnings`); other columns use the detected type (`source.connection`, `source.file.stagingTable`). The table the dataset used before is dropped. If the load fails, the dataset is unchanged.",
-        "parameters": [{ "$ref": "#/components/parameters/IfMatch" }],
+        "parameters": [
+          { "$ref": "#/components/parameters/IfMatch" },
+          { "name": "async", "in": "query", "required": false, "description": "true: answer 202 with a job at once and load in the background (follow it with GET, stop it with DELETE)", "schema": { "type": "boolean", "default": false } }
+        ],
         "responses": {
+          "202": { "description": "Started in the background (async=true)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LoadJob" } } } },
           "200": { "description": "Loaded", "headers": { "ETag": { "$ref": "#/components/headers/ETag" } }, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/StagedTable" } } } },
           "400": { "$ref": "#/components/responses/InvalidRequest" },
           "403": { "$ref": "#/components/responses/Forbidden" },
           "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "description": "`already-exists`: a background load of this dataset is running", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
           "412": { "$ref": "#/components/responses/StaleVersion" },
           "422": { "description": "`validation-failed`: the file settings aren't complete, or `source.connection` names a connection other than the staging one. `source-failed`: the file couldn't be read or has too many rows, or the staging database refused the load.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
           "428": { "$ref": "#/components/responses/VersionRequired" },
           "500": { "$ref": "#/components/responses/Internal" },
           "501": { "$ref": "#/components/responses/NotImplemented" }
+        }
+      },
+      "get": {
+        "tags": ["Datasets"],
+        "operationId": "getDatasetLoad",
+        "summary": "Follow the dataset's background load",
+        "description": "The running or last background load: rows read and loaded so far, then how it ended. Kept in memory: a server restart forgets it.",
+        "responses": {
+          "200": { "description": "The load", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LoadJob" } } } },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "500": { "$ref": "#/components/responses/Internal" }
+        }
+      },
+      "delete": {
+        "tags": ["Datasets"],
+        "operationId": "cancelDatasetLoad",
+        "summary": "Stop the dataset's background load",
+        "description": "It stops within the next thousand rows, drops what it loaded and leaves the dataset as it was.",
+        "responses": {
+          "202": { "description": "Asked to stop", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LoadJob" } } } },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "500": { "$ref": "#/components/responses/Internal" }
         }
       }
     },
@@ -449,6 +478,22 @@
           "schema": { "type": "string", "description": "In effect" },
           "saved": { "$ref": "#/components/schemas/StagingSettings" },
           "defaults": { "$ref": "#/components/schemas/StagingSettings" }
+        }
+      },
+      "LoadJob": {
+        "type": "object",
+        "required": ["id", "datasetId", "state", "rowsRead", "rowsLoaded", "started"],
+        "properties": {
+          "id": { "type": "string" },
+          "datasetId": { "type": "string" },
+          "state": { "type": "string", "enum": ["RUNNING", "SUCCEEDED", "FAILED", "CANCELLED"] },
+          "rowsRead": { "type": "integer", "description": "Rows checked so far (first pass), updated every thousand rows" },
+          "rowsLoaded": { "type": "integer", "description": "Rows inserted so far (second pass), updated every thousand rows" },
+          "started": { "type": "string", "format": "date-time" },
+          "finished": { "type": "string", "format": "date-time" },
+          "table": { "$ref": "#/components/schemas/StagedTable" },
+          "version": { "type": "string", "description": "When it succeeded: the dataset's new version (ETag)" },
+          "error": { "$ref": "#/components/schemas/Error" }
         }
       },
       "Validation": {
