@@ -158,14 +158,48 @@ public class DatasetStagingTest {
     StoredDataset q = create( "Query", sql );
     assertEquals( "source.type", expect( Code.INVALID_REQUEST, () -> service.stage( "query", q.getVersion() ) ).getPath() );
 
+    // A client can't choose where a file is loaded: the connection it names is not kept.
     Source elsewhere = csv( "orders.csv" );
     elsewhere.setConnection( "Production" );
     StoredDataset e = create( "Elsewhere", elsewhere );
-    assertEquals( "source.connection", expect( Code.VALIDATION_FAILED, () -> service.stage( "elsewhere", e.getVersion() ) ).getPath() );
+    assertEquals( null, e.getDefinition().getSource().getConnection() );
+    assertEquals( "Staging", service.stage( "elsewhere", e.getVersion() ).getTable().getConnection() );
 
     StoredDataset m = create( "Missing", csv( "missing.csv" ) );
     assertEquals( "source.file.path", expect( Code.VALIDATION_FAILED, () -> service.stage( "missing", m.getVersion() ) ).getPath() );
-    assertTrue( tables().isEmpty() );
+  }
+
+  @Test
+  public void neverDropsATableOrReadsAFileADefinitionNamesOnItsOwn() throws Exception {
+    try ( java.sql.Statement st = db.createStatement() ) {
+      st.execute( "CREATE TABLE IMPORTANT (x INT)" );
+    }
+    StoredDataset v1 = create( "Orders", csv( "orders.csv" ) );
+    StoredDataset v2 = service.stage( "orders", v1.getVersion() ).getDataset();
+
+    // An update naming another table as the staging table, and another connection, keeps the server's values.
+    DatasetDefinition tampered = v2.getDefinition();
+    tampered.getSource().getFile().setStagingTable( "IMPORTANT" );
+    tampered.getSource().setConnection( "Production" );
+    StoredDataset v3 = service.update( "orders", tampered, v2.getVersion() );
+    assertEquals( v2.getDefinition().getSource().getFile().getStagingTable(), v3.getDefinition().getSource().getFile().getStagingTable() );
+    assertEquals( "Staging", v3.getDefinition().getSource().getConnection() );
+    service.delete( "orders", v3.getVersion() );
+    try ( java.sql.Statement st = db.createStatement() ) {
+      st.executeQuery( "SELECT COUNT(*) FROM IMPORTANT" ).close();
+    }
+
+    // Another dataset's uploaded file can't be named.
+    DatasetDefinition a = new DatasetDefinition();
+    a.setName( "Private" );
+    StoredDataset pa = service.create( a );
+    String secret = service.uploadFile( "private", pa.getVersion(), "s.csv", csvBytes( "x\n1\n" ) )
+      .getDefinition().getSource().getFile().getPath();
+    Source steal = csv( secret );
+    DatasetDefinition b = new DatasetDefinition();
+    b.setName( "Thief" );
+    b.setSource( steal );
+    assertEquals( "source.file.path", expect( Code.VALIDATION_FAILED, () -> service.create( b ) ).getPath() );
   }
 
   @Test

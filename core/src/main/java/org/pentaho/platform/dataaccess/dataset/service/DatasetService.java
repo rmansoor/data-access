@@ -110,6 +110,7 @@ public class DatasetService {
     if ( definition.getOwner() == null || definition.getOwner().trim().isEmpty() ) {
       definition.setOwner( currentUser.get() );
     }
+    keepServerFields( definition, null );
     definition.setSchemaVersion( DatasetUpgrades.CURRENT_VERSION );
     return store.create( definition );
   }
@@ -136,6 +137,7 @@ public class DatasetService {
       throw new DatasetApiException( Code.FORBIDDEN, "owner", "Only the owner or an administrator can hand a dataset to someone else",
         null, null );
     }
+    keepServerFields( definition, current );
     definition.setSchemaVersion( DatasetUpgrades.CURRENT_VERSION );
     return store.update( definition, expectedVersion );
   }
@@ -154,7 +156,7 @@ public class DatasetService {
     store.delete( id, expectedVersion );
     String staged = stagedTable( d );
     if ( staged != null && sources.canStage() ) {
-      sources.stager().drop( d.getSource().getConnection(), staged );
+      sources.stager().drop( id, d.getSource().getConnection(), staged );
     }
     if ( sources.hasFiles() ) {
       sources.files().deleteAll( id );
@@ -295,13 +297,10 @@ public class DatasetService {
     }
     requireReadableSource( d );
     CsvStager stager = sources.stager();
+    // Always the current staging connection; source.connection is where the server put the last
+    // load (clients can't set it), which is where the previous table is dropped from.
     String connection = stager.connection();
-    if ( source.getConnection() != null && !source.getConnection().trim().isEmpty()
-      && !source.getConnection().trim().equals( connection ) ) {
-      String why = "must be the staging connection (\"" + connection + "\") or left out; uploaded files are loaded only there";
-      throw new DatasetApiException( Code.VALIDATION_FAILED, "source.connection", "The source's connection " + why,
-        List.of( new DatasetProblem( "source.connection", why ) ), null );
-    }
+    String previousConnection = source.getConnection();
     String previous = stagedTable( d );
     StagedTable table = stager.stage( id, source, d.getColumns() );
     source.setConnection( connection );
@@ -310,11 +309,11 @@ public class DatasetService {
     try {
       updated = store.update( d, expectedVersion );
     } catch ( RuntimeException e ) {
-      stager.drop( connection, table.getTable() );
+      stager.drop( id, connection, table.getTable() );
       throw e;
     }
-    if ( previous != null && !previous.equals( table.getTable() ) ) {
-      stager.drop( connection, previous );
+    if ( previous != null && !( previous.equals( table.getTable() ) && connection.equals( previousConnection ) ) ) {
+      stager.drop( id, previousConnection, previous );
     }
     LOG.debug( "Dataset " + id + " loaded " + table.getRows() + " rows into " + table.getTable() );
     return new Staging( updated, table );
@@ -359,6 +358,36 @@ public class DatasetService {
   }
 
   // ------------------------------------------------------------------------------------------------
+
+  /**
+   * A FILE source's staging connection and table, and its uploaded file's name and original name,
+   * are the server's to set (by uploading and loading). From a client they are taken from the
+   * stored definition instead: a definition can't name a table for the server to drop, or another
+   * dataset's uploaded file to read. A file in the wizard's upload folders may still be named.
+   */
+  private static void keepServerFields( DatasetDefinition incoming, DatasetDefinition current ) {
+    Source in = incoming.getSource();
+    if ( in == null || in.getType() != SourceType.FILE ) {
+      return;
+    }
+    Source was = current == null ? null : current.getSource();
+    FileSource wasFile = was != null && was.getType() == SourceType.FILE ? was.getFile() : null;
+    in.setConnection( wasFile == null ? null : was.getConnection() );
+    FileSource file = in.getFile();
+    if ( file == null ) {
+      return;
+    }
+    String path = file.getPath();
+    String stored = wasFile == null ? null : wasFile.getPath();
+    if ( DatasetFiles.isStored( path ) && !path.equals( stored ) ) {
+      String why = "names an uploaded file this dataset doesn't have; upload a file instead (PUT .../file)";
+      throw new DatasetApiException( Code.VALIDATION_FAILED, "source.file.path", "The source's file.path " + why,
+        List.of( new DatasetProblem( "source.file.path", why ) ), null );
+    }
+    boolean sameFile = path != null && path.equals( stored );
+    file.setOriginalName( sameFile ? wasFile.getOriginalName() : null );
+    file.setStagingTable( wasFile == null ? null : wasFile.getStagingTable() );
+  }
 
   private void requireReadableSource( DatasetDefinition d ) {
     List<DatasetProblem> problems = validator.validate( d ).stream()

@@ -126,9 +126,17 @@ public class CsvStager {
     }
   }
 
-  /** Drops a table an earlier load made; logs rather than fails, since the dataset no longer uses it. */
-  public void drop( String connection, String table ) {
+  /**
+   * Drops a table an earlier load of this dataset made; logs rather than fails, since the dataset
+   * no longer uses it. Only a name this stager generates for the dataset is ever dropped
+   * ({@link #isOwnTable}), so a definition naming some other table can't get it dropped.
+   */
+  public void drop( String datasetId, String connection, String table ) {
     if ( table == null || table.trim().isEmpty() ) {
+      return;
+    }
+    if ( !isOwnTable( datasetId, table ) ) {
+      LOG.warn( "Not dropping \"" + table + "\" for dataset " + datasetId + ": it isn't a table this server staged for it" );
       return;
     }
     try ( Connection c = open( connection == null ? connection() : connection ) ) {
@@ -531,6 +539,24 @@ public class CsvStager {
   private String qualifiedName( String table ) {
     String schema = stagingSchema.get();
     return schema == null || schema.trim().isEmpty() ? table : schema.trim() + "." + table;
+  }
+
+  /**
+   * Whether {@code table} ({@code [schema.]name}) has the shape {@link #tableName} gives this
+   * dataset's tables: {@code ds_<id, made safe and possibly shortened>_<time>}, in any case.
+   */
+  static boolean isOwnTable( String datasetId, String table ) {
+    if ( datasetId == null || table == null ) {
+      return false;
+    }
+    String name = table.substring( table.lastIndexOf( '.' ) + 1 ).toLowerCase( Locale.ROOT );
+    java.util.regex.Matcher m = java.util.regex.Pattern.compile( "(ds_[a-z0-9_]*?)_([0-9a-z]{6,13})" ).matcher( name );
+    if ( !m.matches() ) {
+      return false;
+    }
+    String base = m.group( 1 ).replaceAll( "_$", "" );
+    String full = identifier( "ds_" + datasetId, "ds", 1000 );
+    return base.length() > 3 && full.startsWith( base ) && ( base.length() == full.length() || base.length() >= 12 );
   }
 
   static String identifier( String text, String fallback, int max ) {

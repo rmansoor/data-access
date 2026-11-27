@@ -169,9 +169,9 @@ public class CsvStagerTest {
     assertFalse( first.getTable().equals( second.getTable() ) );
     assertEquals( 2, tables().size() );
 
-    stager.drop( "Staging", first.getTable() );
+    stager.drop( "a", "Staging", first.getTable() );
     assertEquals( List.of( "PUBLIC." + second.getTable() ), tables() );
-    stager.drop( "Staging", first.getTable() ); // already gone: logged, not thrown
+    stager.drop( "a", "Staging", first.getTable() ); // already gone: logged, not thrown
   }
 
   @Test
@@ -183,7 +183,7 @@ public class CsvStagerTest {
     StagedTable t = stager().stage( "a", file( "a.csv", "x\n1\n" ) );
     assertTrue( t.getTable(), t.getTable().startsWith( "STAGE.DS_A_" ) );
     assertEquals( List.of( t.getTable() ), tables() );
-    stager().drop( "Staging", t.getTable() );
+    stager().drop( "a", "Staging", t.getTable() );
     assertTrue( tables().isEmpty() );
   }
 
@@ -255,6 +255,21 @@ public class CsvStagerTest {
         // refused
       }
     }
+  }
+
+  @Test
+  public void recognisesOnlyTheTablesItNamesForADataset() {
+    assertTrue( CsvStager.isOwnTable( "orders", "DS_ORDERS_MOKX3K2O" ) );
+    assertTrue( CsvStager.isOwnTable( "orders", "STAGE.ds_orders_mokx3k2o" ) );
+    assertTrue( CsvStager.isOwnTable( "orders-2", "DS_ORDERS_2_MOKX3K2O" ) );
+    assertFalse( CsvStager.isOwnTable( "orders", "DS_ORDERS_2_MOKX3K2O" ) );
+    assertFalse( CsvStager.isOwnTable( "orders", "IMPORTANT" ) );
+    assertFalse( CsvStager.isOwnTable( "orders", "DS_ORD_MOKX3K2O" ) );
+    assertFalse( CsvStager.isOwnTable( "orders", "DS_ORDERS" ) );
+    assertFalse( CsvStager.isOwnTable( "orders", "USERS; DROP TABLE X" ) );
+    // A long id is shortened in the name; the shortened form still counts.
+    String id = "monthly-orders-by-region-and-quarter";
+    assertTrue( CsvStager.isOwnTable( id, "DS_MONTHLY_ORDERS_BY_MOKX3K2O" ) );
   }
 
   private static DatasetApiException expect( Code code, Runnable call ) {
