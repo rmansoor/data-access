@@ -19,7 +19,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.pentaho.agilebi.modeler.ModelerMessagesHolder;
 import org.pentaho.agilebi.modeler.ModelerWorkspace;
-import org.pentaho.agilebi.modeler.gwt.GwtModelerWorkspaceHelper;
+import org.pentaho.platform.dataaccess.datasource.modeler.ServerModelerWorkspaceHelper;
 import org.pentaho.agilebi.modeler.util.SpoonModelerMessages;
 import org.pentaho.agilebi.modeler.util.TableModelerSource;
 import org.pentaho.database.model.IDatabaseConnection;
@@ -218,7 +218,7 @@ public class SerializeServiceIT {
     Domain domain = generateModel();
     ModelerService service = new ModelerService();
 
-    ModelerWorkspace model = new ModelerWorkspace(new GwtModelerWorkspaceHelper());
+    ModelerWorkspace model = new ModelerWorkspace(new ServerModelerWorkspaceHelper());
     model.setModelName("ORDERS");
     model.setDomain(domain);
     model.getWorkspaceHelper().populateDomain(model);

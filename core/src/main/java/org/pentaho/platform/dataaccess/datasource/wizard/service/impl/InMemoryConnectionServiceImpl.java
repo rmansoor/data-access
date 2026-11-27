@@ -28,7 +28,7 @@ import org.pentaho.database.IDatabaseDialect;
 import org.pentaho.database.model.IDatabaseConnection;
 import org.pentaho.database.service.DatabaseDialectService;
 import org.pentaho.platform.dataaccess.datasource.wizard.service.ConnectionServiceException;
-import org.pentaho.platform.dataaccess.datasource.wizard.service.gwt.IConnectionService;
+import org.pentaho.platform.dataaccess.datasource.wizard.service.IConnectionService;
 import org.pentaho.platform.dataaccess.datasource.wizard.service.messages.Messages;
 
 public class InMemoryConnectionServiceImpl implements IConnectionService {

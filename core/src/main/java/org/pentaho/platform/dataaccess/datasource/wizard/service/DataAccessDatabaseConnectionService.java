@@ -15,7 +15,7 @@
 package org.pentaho.platform.dataaccess.datasource.wizard.service;
 
 import org.pentaho.database.model.IDatabaseConnection;
-import org.pentaho.database.service.DatabaseConnectionService;
+import org.pentaho.platform.dataaccess.datasource.connection.DatabaseConnectionService;
 import org.pentaho.platform.dataaccess.datasource.wizard.service.impl.utils.ConnectionServiceHelper;
 
 public class DataAccessDatabaseConnectionService extends DatabaseConnectionService {

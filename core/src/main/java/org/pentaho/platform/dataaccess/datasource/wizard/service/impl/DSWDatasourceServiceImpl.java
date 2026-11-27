@@ -29,7 +29,7 @@ import org.pentaho.agilebi.modeler.ModelerException;
 import org.pentaho.agilebi.modeler.ModelerPerspective;
 import org.pentaho.agilebi.modeler.ModelerWorkspace;
 import org.pentaho.agilebi.modeler.geo.GeoContext;
-import org.pentaho.agilebi.modeler.gwt.GwtModelerWorkspaceHelper;
+import org.pentaho.platform.dataaccess.datasource.modeler.ServerModelerWorkspaceHelper;
 import org.pentaho.commons.connection.IPentahoConnection;
 import org.pentaho.commons.connection.IPentahoResultSet;
 import org.pentaho.database.model.DatabaseConnection;
@@ -49,7 +49,6 @@ import org.pentaho.metadata.util.SQLModelGeneratorException;
 import org.pentaho.metadata.util.SerializationService;
 import org.pentaho.platform.api.engine.IPentahoUrlFactory;
 import org.pentaho.platform.api.engine.IPluginResourceLoader;
-import org.pentaho.platform.dataaccess.datasource.beans.BogoPojo;
 import org.pentaho.platform.dataaccess.datasource.beans.BusinessData;
 import org.pentaho.platform.dataaccess.datasource.beans.LogicalModelSummary;
 import org.pentaho.platform.dataaccess.datasource.beans.SerializedResultSet;
@@ -65,7 +64,7 @@ import org.pentaho.platform.dataaccess.datasource.wizard.service.QueryValidation
 import org.pentaho.platform.dataaccess.datasource.wizard.service.SqlQueriesNotSupportedException;
 import org.pentaho.platform.dataaccess.datasource.wizard.service.agile.AgileHelper;
 import org.pentaho.platform.dataaccess.datasource.wizard.service.agile.CsvTransformGenerator;
-import org.pentaho.platform.dataaccess.datasource.wizard.service.gwt.IDSWDatasourceService;
+import org.pentaho.platform.dataaccess.datasource.wizard.service.IDSWDatasourceService;
 import org.pentaho.platform.dataaccess.datasource.wizard.service.impl.utils.DatasourceServiceHelper;
 import org.pentaho.platform.dataaccess.datasource.wizard.service.impl.utils.UtilHtmlSanitizer;
 import org.pentaho.platform.dataaccess.datasource.wizard.service.messages.Messages;
@@ -154,7 +153,7 @@ public class DSWDatasourceServiceImpl implements IDSWDatasourceService {
   }
 
   protected ModelerWorkspace createModelerWorkspace() {
-    return new ModelerWorkspace( new GwtModelerWorkspaceHelper() );
+    return new ModelerWorkspace( new ServerModelerWorkspaceHelper() );
   }
 
   protected ModelerService createModelerService() {
@@ -548,10 +547,6 @@ public class DSWDatasourceServiceImpl implements IDSWDatasourceService {
     return new BusinessData( domain, data );
   }
 
-  public BogoPojo gwtWorkaround( BogoPojo pojo ) {
-    return pojo;
-  }
-
   public String serializeModelState( DatasourceDTO dto ) throws DatasourceServiceException {
     XStream xstream = SerializationService.createXStreamWithAllowedTypes( null, null );
     return xstream.toXML( dto );
@@ -591,7 +586,7 @@ public class DSWDatasourceServiceImpl implements IDSWDatasourceService {
   public QueryDatasourceSummary generateQueryDomain( String name, String query, DatabaseConnection connection,
                                                      DatasourceDTO datasourceDTO ) throws DatasourceServiceException {
 
-    ModelerWorkspace modelerWorkspace = new ModelerWorkspace( new GwtModelerWorkspaceHelper(), getGeoContext() );
+    ModelerWorkspace modelerWorkspace = new ModelerWorkspace( new ServerModelerWorkspaceHelper(), getGeoContext() );
     ModelerService modelerService = createModelerService();
     modelerWorkspace.setModelName( name );
 

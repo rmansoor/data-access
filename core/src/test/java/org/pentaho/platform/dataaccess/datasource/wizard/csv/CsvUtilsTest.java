@@ -24,7 +24,7 @@ import org.pentaho.di.core.row.value.ValueMetaInteger;
 import org.pentaho.di.core.row.value.ValueMetaNone;
 import org.pentaho.di.core.row.value.ValueMetaNumber;
 import org.pentaho.di.core.row.value.ValueMetaString;
-import org.pentaho.gwt.widgets.client.utils.string.StringTokenizer;
+import java.util.StringTokenizer;
 import org.pentaho.metadata.model.concept.types.DataType;
 import org.pentaho.metadata.util.Util;
 import org.pentaho.platform.dataaccess.datasource.wizard.models.ColumnInfo;

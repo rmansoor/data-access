@@ -103,14 +103,6 @@
     </dependency>
     <dependency>
       <groupId>pentaho</groupId>
-      <artifactId>pentaho-modeler-gwt</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.pentaho</groupId>
-      <artifactId>commons-database-gwt</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>pentaho</groupId>
       <artifactId>pentaho-connections</artifactId>
     </dependency>
     <dependency>
@@ -120,14 +112,6 @@
     <dependency>
       <groupId>org.pentaho</groupId>
       <artifactId>commons-xul-core</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.pentaho</groupId>
-      <artifactId>commons-xul-gwt-impl</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.pentaho</groupId>
-      <artifactId>commons-gwt-widgets</artifactId>
     </dependency>
     <dependency>
       <groupId>pentaho-kettle</groupId>
@@ -272,22 +256,6 @@
       <version>${jersey.version}</version>
     </dependency>
     <dependency>
-      <groupId>com.google.gwt</groupId>
-      <artifactId>gwt-incubator</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>com.allen-sauer.gwt.dnd</groupId>
-      <artifactId>gwt-dnd</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.gwtproject</groupId>
-      <artifactId>gwt-user</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.gwtproject</groupId>
-      <artifactId>gwt-dev</artifactId>
-    </dependency>
-    <dependency>
       <groupId>jakarta.ws.rs</groupId>
       <artifactId>jakarta.ws.rs-api</artifactId>
     </dependency>
@@ -388,16 +356,6 @@
     <dependency>
       <groupId>net.bytebuddy</groupId>
       <artifactId>byte-buddy</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>com.google.gwt.gwtmockito</groupId>
-      <artifactId>gwtmockito</artifactId>
-      <exclusions>
-        <exclusion>
-          <artifactId>*</artifactId>
-          <groupId>xalan</groupId>
-        </exclusion>
-      </exclusions>
     </dependency>
     <dependency>
       <groupId>org.jmock</groupId>
@@ -722,8 +680,8 @@
               <importMappings>
                 <importMapping>DatabaseConnection=org.pentaho.database.model.DatabaseConnection</importMapping>
                 <importMapping>IDatabaseConnection=org.pentaho.database.model.IDatabaseConnection</importMapping>
-                <importMapping>IDatabaseConnectionList=org.pentaho.ui.database.event.IDatabaseConnectionList</importMapping>
-                <importMapping>IDatabaseConnectionPoolParameterList=org.pentaho.ui.database.event.IDatabaseConnectionPoolParameterList</importMapping>
+                <importMapping>IDatabaseConnectionList=org.pentaho.platform.dataaccess.datasource.connection.IDatabaseConnectionList</importMapping>
+                <importMapping>IDatabaseConnectionPoolParameterList=org.pentaho.platform.dataaccess.datasource.connection.IDatabaseConnectionPoolParameterList</importMapping>
                 <importMapping>StringArrayWrapper=org.pentaho.platform.dataaccess.datasource.wizard.service.impl.StringArrayWrapper</importMapping>
               </importMappings>
               <configOptions>
@@ -736,10 +694,9 @@
                 <skipDefaultInterface>true</skipDefaultInterface>
                 <openApiNullable>false</openApiNullable>
                 <!--
-                  Generate container properties as null rather than pre-initialised empty collections. An eagerly
-                  initialised list serialises as "[]" instead of being omitted, and on the GWT client
-                  AutoBeanCodex.decode wraps any non-null list in emul.java.util.ListAutoBean, which no GWT-RPC
-                  serialization policy recognises. See BACKLOG-50628.
+                  Generate container properties as null rather than pre-initialised empty collections, so an
+                  unset list is omitted from the JSON rather than sent as "[]". Existing clients rely on that
+                  shape (originally for the GWT client; see BACKLOG-50628).
                 -->
                 <containerDefaultToNull>true</containerDefaultToNull>
               </configOptions>

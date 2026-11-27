@@ -30,8 +30,8 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.pentaho.agilebi.modeler.ModelerPerspective;
 import org.pentaho.agilebi.modeler.ModelerWorkspace;
-import org.pentaho.agilebi.modeler.gwt.GwtModelerWorkspaceHelper;
-import org.pentaho.agilebi.modeler.services.IModelerService;
+import org.pentaho.platform.dataaccess.datasource.modeler.ServerModelerWorkspaceHelper;
+import org.pentaho.platform.dataaccess.datasource.modeler.IModelerService;
 import org.pentaho.agilebi.modeler.util.ModelerWorkspaceHelper;
 import org.pentaho.metadata.model.Domain;
 import org.pentaho.metadata.model.LogicalModel;
@@ -50,7 +50,7 @@ import org.pentaho.platform.dataaccess.datasource.api.resources.MetadataTempFile
 import org.pentaho.platform.dataaccess.datasource.utils.DataAccessPermissionUtil;
 import org.pentaho.platform.dataaccess.datasource.wizard.service.ConnectionServiceException;
 import org.pentaho.platform.dataaccess.datasource.wizard.service.DatasourceServiceException;
-import org.pentaho.platform.dataaccess.datasource.wizard.service.gwt.IDSWDatasourceService;
+import org.pentaho.platform.dataaccess.datasource.wizard.service.IDSWDatasourceService;
 import org.pentaho.platform.dataaccess.datasource.wizard.service.impl.DSWDatasourceServiceImpl;
 import org.pentaho.platform.dataaccess.datasource.wizard.service.impl.ModelerService;
 import org.pentaho.platform.dataaccess.datasource.wizard.service.impl.utils.UtilHtmlSanitizer;
@@ -459,7 +459,7 @@ public class DataSourceWizardService extends DatasourceService {
   }
 
   protected ModelerWorkspace createModelerWorkspace() {
-    return new ModelerWorkspace( new GwtModelerWorkspaceHelper() );
+    return new ModelerWorkspace( new ServerModelerWorkspaceHelper() );
   }
 
   protected MondrianCatalogRepositoryHelper createMondrianCatalogRepositoryHelper() {

@@ -20,7 +20,7 @@ import org.pentaho.database.model.DatabaseConnectionPoolParameter;
 import org.pentaho.database.model.IDatabaseConnection;
 import org.pentaho.database.model.IDatabaseConnectionPoolParameter;
 import org.pentaho.database.service.DatabaseDialectService;
-import org.pentaho.database.util.DatabaseUtil;
+import org.pentaho.platform.dataaccess.datasource.connection.DatabaseUtil;
 import org.pentaho.di.core.encryption.Encr;
 import org.pentaho.di.core.variables.VariableSpace;
 import org.pentaho.di.core.variables.Variables;
@@ -40,8 +40,8 @@ import org.pentaho.platform.security.policy.rolebased.actions.AdministerSecurity
 import org.pentaho.platform.security.policy.rolebased.actions.PublishAction;
 import org.pentaho.platform.security.policy.rolebased.actions.RepositoryCreateAction;
 import org.pentaho.platform.security.policy.rolebased.actions.RepositoryReadAction;
-import org.pentaho.ui.database.event.DefaultDatabaseConnectionPoolParameterList;
-import org.pentaho.ui.database.event.IDatabaseConnectionPoolParameterList;
+import org.pentaho.platform.dataaccess.datasource.connection.DefaultDatabaseConnectionPoolParameterList;
+import org.pentaho.platform.dataaccess.datasource.connection.IDatabaseConnectionPoolParameterList;
 
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;

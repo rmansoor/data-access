@@ -14,7 +14,6 @@
 
 package org.pentaho.platform.dataaccess.datasource.api.resources;
 
-import com.google.gwt.thirdparty.guava.common.annotations.VisibleForTesting;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -59,7 +58,7 @@ public class JDBCDatasourceResource {
     service = new ConnectionServiceImpl();
   }
 
-  @VisibleForTesting
+  /* visible for testing */
   protected JDBCDatasourceResource( ConnectionServiceImpl service ) {
     this.service = service;
   }

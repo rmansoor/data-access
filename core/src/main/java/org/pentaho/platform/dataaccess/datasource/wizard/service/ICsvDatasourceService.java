@@ -1,0 +1,38 @@
+/*! ******************************************************************************
+ *
+ * Pentaho
+ *
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
+ *
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
+ *
+ * Change Date: 2030-06-15
+ ******************************************************************************/
+
+
+
+package org.pentaho.platform.dataaccess.datasource.wizard.service;
+
+import java.util.List;
+
+import org.pentaho.platform.dataaccess.datasource.wizard.models.DatasourceDTO;
+import org.pentaho.platform.dataaccess.datasource.wizard.models.FileInfo;
+import org.pentaho.platform.dataaccess.datasource.wizard.models.ModelInfo;
+import org.pentaho.platform.dataaccess.datasource.wizard.sources.csv.FileTransformStats;
+
+
+public interface ICsvDatasourceService {
+
+  public ModelInfo stageFile( String name, String delimiter, String enclosure, boolean isFirstRowHeader,
+                              String encoding ) throws Exception;
+
+  public FileInfo[] getStagedFiles() throws Exception;
+
+  public FileTransformStats generateDomain( DatasourceDTO datasourceDto ) throws Exception;
+
+  public List<String> getPreviewRows( String filename, boolean isFirstRowHeader, int rows, String encoding )
+    throws Exception;
+
+  public String getEncoding( String fileName ) throws Exception;
+}

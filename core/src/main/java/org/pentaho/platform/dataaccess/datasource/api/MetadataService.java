@@ -57,7 +57,6 @@ import org.pentaho.platform.util.UUIDUtil;
 import org.pentaho.platform.web.http.api.resources.FileResource;
 import org.pentaho.platform.web.servlet.UploadFileUtils;
 
-import com.google.gwt.thirdparty.guava.common.annotations.VisibleForTesting;
 import org.glassfish.jersey.media.multipart.FormDataContentDisposition;
 import org.glassfish.jersey.media.multipart.FormDataBodyPart;
 
@@ -301,7 +300,7 @@ public class MetadataService extends DatasourceService {
 
   }
 
-  @VisibleForTesting
+  /* visible for testing */
   InputStream validateFileSize( InputStream metadataFile, String domainId )
     throws IOException, PlatformImportException {
     // maxFileLimit is 10 Mb by default

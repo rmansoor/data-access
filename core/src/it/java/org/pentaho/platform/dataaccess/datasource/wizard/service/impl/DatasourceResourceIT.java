@@ -26,7 +26,7 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.pentaho.agilebi.modeler.ModelerWorkspace;
-import org.pentaho.agilebi.modeler.gwt.GwtModelerWorkspaceHelper;
+import org.pentaho.platform.dataaccess.datasource.modeler.ServerModelerWorkspaceHelper;
 import org.pentaho.agilebi.modeler.util.TableModelerSource;
 import org.pentaho.database.model.IDatabaseConnection;
 import org.pentaho.di.core.KettleEnvironment;
@@ -222,7 +222,7 @@ public class DatasourceResourceIT {
 
     Domain domain = generateModel();
 
-    ModelerWorkspace model = new ModelerWorkspace( new GwtModelerWorkspaceHelper() );
+    ModelerWorkspace model = new ModelerWorkspace( new ServerModelerWorkspaceHelper() );
     model.setModelName( "ORDERS" );
     model.setDomain( domain );
     model.getWorkspaceHelper().populateDomain( model );

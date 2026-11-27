@@ -28,10 +28,10 @@ import org.codehaus.enunciate.Facet;
 import org.pentaho.database.IDatabaseDialect;
 import org.pentaho.database.model.IDatabaseConnection;
 import org.pentaho.database.model.IDatabaseType;
-import org.pentaho.ui.database.event.DefaultDatabaseDialectList;
-import org.pentaho.ui.database.event.DefaultDatabaseTypesList;
-import org.pentaho.ui.database.event.IDatabaseDialectList;
-import org.pentaho.ui.database.event.IDatabaseTypesList;
+import org.pentaho.platform.dataaccess.datasource.connection.DefaultDatabaseDialectList;
+import org.pentaho.platform.dataaccess.datasource.connection.DefaultDatabaseTypesList;
+import org.pentaho.platform.dataaccess.datasource.connection.IDatabaseDialectList;
+import org.pentaho.platform.dataaccess.datasource.connection.IDatabaseTypesList;
 
 @Path( "/data-access/api/dialect" )
 public class DatabaseDialectService extends org.pentaho.database.service.DatabaseDialectService {

@@ -34,8 +34,8 @@ import jakarta.ws.rs.ext.MessageBodyReader;
 import jakarta.ws.rs.ext.MessageBodyWriter;
 import jakarta.ws.rs.ext.Provider;
 
-import org.pentaho.ui.database.event.DefaultDatabaseConnectionList;
-import org.pentaho.ui.database.event.IDatabaseConnectionList;
+import org.pentaho.platform.dataaccess.datasource.connection.DefaultDatabaseConnectionList;
+import org.pentaho.platform.dataaccess.datasource.connection.IDatabaseConnectionList;
 
 /**
  * Reads and writes Database Connection objects using Jackson so that they won't lose map values when converting

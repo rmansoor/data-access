@@ -27,8 +27,8 @@ import org.junit.Test;
 import org.pentaho.database.model.DatabaseConnection;
 import org.pentaho.database.model.DatabaseType;
 import org.pentaho.database.model.IDatabaseConnection;
-import org.pentaho.ui.database.event.DefaultDatabaseConnectionList;
-import org.pentaho.ui.database.event.IDatabaseConnectionList;
+import org.pentaho.platform.dataaccess.datasource.connection.DefaultDatabaseConnectionList;
+import org.pentaho.platform.dataaccess.datasource.connection.IDatabaseConnectionList;
 
 /**
  * Regression coverage for {@link DatabaseConnectionListReaderWriter} (same interface-deserialization

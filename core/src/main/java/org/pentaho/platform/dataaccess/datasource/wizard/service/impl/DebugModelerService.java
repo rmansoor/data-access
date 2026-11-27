@@ -17,7 +17,7 @@ package org.pentaho.platform.dataaccess.datasource.wizard.service.impl;
 import java.io.File;
 
 import org.pentaho.agilebi.modeler.ModelerWorkspace;
-import org.pentaho.agilebi.modeler.gwt.GwtModelerWorkspaceHelper;
+import org.pentaho.platform.dataaccess.datasource.modeler.ServerModelerWorkspaceHelper;
 import org.pentaho.metadata.model.Domain;
 import org.pentaho.metadata.model.LogicalModel;
 import org.pentaho.metadata.model.SqlPhysicalModel;
@@ -57,7 +57,7 @@ public class DebugModelerService extends ModelerService {
     try {
       DSWDatasourceServiceImpl datasourceService = new DSWDatasourceServiceImpl();
       ModelerWorkspace model =
-        new ModelerWorkspace( new GwtModelerWorkspaceHelper(), datasourceService.getGeoContext() );
+        new ModelerWorkspace( new ServerModelerWorkspaceHelper(), datasourceService.getGeoContext() );
       model.setModelName( name );
       model.setDomain( domain );
       String solutionStorage = AgileHelper.getDatasourceSolutionStorage();

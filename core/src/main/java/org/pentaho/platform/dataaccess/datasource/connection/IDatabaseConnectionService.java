@@ -1,0 +1,32 @@
+/*! ******************************************************************************
+ *
+ * Pentaho
+ *
+ * Copyright (C) 2024 - 2026 by Pentaho Canada Inc. : http://www.pentaho.com
+ *
+ * Use of this software is governed by the Business Source License included
+ * in the LICENSE.TXT file.
+ *
+ * Change Date: 2030-06-15
+ ******************************************************************************/
+
+
+
+package org.pentaho.platform.dataaccess.datasource.connection;
+
+import java.util.List;
+
+import org.pentaho.database.model.DatabaseConnectionPoolParameter;
+import org.pentaho.database.model.IDatabaseConnection;
+
+public interface IDatabaseConnectionService {
+
+  IDatabaseConnection createDatabaseConnection(String driver, String url);
+  
+  List<String> checkParameters(final IDatabaseConnection connection);
+
+  String testConnection(final IDatabaseConnection connection);
+
+  DatabaseConnectionPoolParameter[] getPoolingParameters();
+  
+}

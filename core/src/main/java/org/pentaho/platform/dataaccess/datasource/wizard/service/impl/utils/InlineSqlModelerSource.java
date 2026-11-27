@@ -24,7 +24,7 @@ import org.pentaho.metadata.model.SqlPhysicalTable;
 import org.pentaho.metadata.util.ThinModelConverter;
 import org.pentaho.platform.dataaccess.datasource.beans.BusinessData;
 import org.pentaho.platform.dataaccess.datasource.wizard.service.DatasourceServiceException;
-import org.pentaho.platform.dataaccess.datasource.wizard.service.gwt.IDSWDatasourceService;
+import org.pentaho.platform.dataaccess.datasource.wizard.service.IDSWDatasourceService;
 import org.pentaho.platform.dataaccess.datasource.wizard.service.impl.DSWDatasourceServiceImpl;
 import org.pentaho.reporting.libraries.base.util.StringUtils;
 
