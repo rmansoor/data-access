@@ -280,6 +280,7 @@ public class CsvStager {
         }
         return true;
       } );
+      progress.read( p.rows );
       for ( int c = 0; c < p.width(); c++ ) {
         if ( p.misfits[ c ] > 0 ) {
           p.warn( "Column \"" + p.detected.columns.get( c ).getName() + "\" has " + p.misfits[ c ] + " value(s) that aren't "

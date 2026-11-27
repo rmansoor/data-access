@@ -302,7 +302,8 @@ public class CsvStagerTest {
     } catch ( CsvStager.Cancelled expected ) {
       // stopped
     }
-    assertEquals( CsvStager.BATCH * 2, seen[ 0 ] );
+    // Every line is counted as read, the last partial batch too, before loading starts.
+    assertEquals( CsvStager.BATCH * 3, seen[ 0 ] );
     assertEquals( CsvStager.BATCH, seen[ 1 ] );
     assertTrue( tables().isEmpty() );
   }
