@@ -1,0 +1,324 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Pentaho Datasets API",
+    "version": "2.0",
+    "description": "Create, change, share, validate and publish datasets: a source (database tables, a SQL query or an uploaded file), its columns, an optional model, row-level security and refresh settings.\n\nEvery read returns the dataset's version as an ETag. Every update and delete must send it back as If-Match; the server refuses with 412 if the dataset changed in between, and with 428 if If-Match is missing. Sharing has its own ETag. Errors are always JSON (see Error), never an HTML page; clients switch on `code`, which never changes meaning.\n\nThe v1 data source endpoints are unchanged."
+  },
+  "servers": [{ "url": "/pentaho/plugin", "description": "This Pentaho server" }],
+  "tags": [
+    { "name": "Datasets" },
+    { "name": "Sharing" },
+    { "name": "About this API" }
+  ],
+  "paths": {
+    "/data-access/api/v2/datasets": {
+      "get": {
+        "tags": ["Datasets"],
+        "operationId": "listDatasets",
+        "summary": "List the datasets you can see, by name",
+        "responses": {
+          "200": { "description": "The datasets", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DatasetList" } } } },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "500": { "$ref": "#/components/responses/Internal" }
+        }
+      },
+      "post": {
+        "tags": ["Datasets"],
+        "operationId": "createDataset",
+        "summary": "Create a draft dataset",
+        "description": "Only `name` is required for a draft. Without an `id`, one is made from the name (\"Monthly orders\" becomes `monthly-orders`, then `monthly-orders-2`). The owner defaults to you.",
+        "requestBody": { "$ref": "#/components/requestBodies/Definition" },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "headers": {
+              "Location": { "description": "The new dataset's address", "schema": { "type": "string" } },
+              "ETag": { "$ref": "#/components/headers/ETag" }
+            },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DatasetDefinition" } } }
+          },
+          "400": { "$ref": "#/components/responses/InvalidDefinition" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "409": { "$ref": "#/components/responses/AlreadyExists" },
+          "422": { "$ref": "#/components/responses/ValidationFailed" },
+          "500": { "$ref": "#/components/responses/Internal" }
+        }
+      }
+    },
+    "/data-access/api/v2/datasets/{id}": {
+      "parameters": [{ "$ref": "#/components/parameters/Id" }],
+      "get": {
+        "tags": ["Datasets"],
+        "operationId": "getDataset",
+        "summary": "Read a dataset",
+        "description": "A dataset shared restrictively with others answers 404 to you, as if it did not exist.",
+        "parameters": [{ "$ref": "#/components/parameters/IfNoneMatch" }],
+        "responses": {
+          "200": {
+            "description": "The definition",
+            "headers": { "ETag": { "$ref": "#/components/headers/ETag" } },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DatasetDefinition" } } }
+          },
+          "304": { "description": "Unchanged since the version named in If-None-Match" },
+          "400": { "$ref": "#/components/responses/InvalidDefinition" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "500": { "$ref": "#/components/responses/Internal" }
+        }
+      },
+      "put": {
+        "tags": ["Datasets"],
+        "operationId": "updateDataset",
+        "summary": "Replace a dataset's definition",
+        "description": "The `id` can't change. Leaving `owner` out keeps the current owner; only the owner or an administrator can hand the dataset to someone else.",
+        "parameters": [{ "$ref": "#/components/parameters/IfMatch" }],
+        "requestBody": { "$ref": "#/components/requestBodies/Definition" },
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "headers": { "ETag": { "$ref": "#/components/headers/ETag" } },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DatasetDefinition" } } }
+          },
+          "400": { "$ref": "#/components/responses/InvalidDefinition" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "412": { "$ref": "#/components/responses/StaleVersion" },
+          "422": { "$ref": "#/components/responses/ValidationFailed" },
+          "428": { "$ref": "#/components/responses/VersionRequired" },
+          "500": { "$ref": "#/components/responses/Internal" }
+        }
+      },
+      "delete": {
+        "tags": ["Datasets"],
+        "operationId": "deleteDataset",
+        "summary": "Delete a dataset",
+        "description": "The dataset goes to the repository trash and can be restored from there.",
+        "parameters": [{ "$ref": "#/components/parameters/IfMatch" }],
+        "responses": {
+          "204": { "description": "Deleted" },
+          "400": { "$ref": "#/components/responses/InvalidDefinition" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "412": { "$ref": "#/components/responses/StaleVersion" },
+          "428": { "$ref": "#/components/responses/VersionRequired" },
+          "500": { "$ref": "#/components/responses/Internal" }
+        }
+      }
+    },
+    "/data-access/api/v2/datasets/{id}/validate": {
+      "parameters": [{ "$ref": "#/components/parameters/Id" }],
+      "post": {
+        "tags": ["Datasets"],
+        "operationId": "validateDataset",
+        "summary": "List what still blocks publishing",
+        "responses": {
+          "200": { "description": "The result; `valid` is false when there are problems", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Validation" } } } },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "500": { "$ref": "#/components/responses/Internal" }
+        }
+      }
+    },
+    "/data-access/api/v2/datasets/{id}/acl": {
+      "parameters": [{ "$ref": "#/components/parameters/Id" }],
+      "get": {
+        "tags": ["Sharing"],
+        "operationId": "getDatasetSharing",
+        "summary": "Read who the dataset is shared with",
+        "responses": {
+          "200": {
+            "description": "The sharing",
+            "headers": { "ETag": { "$ref": "#/components/headers/SharingETag" } },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Sharing" } } }
+          },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "500": { "$ref": "#/components/responses/Internal" }
+        }
+      },
+      "put": {
+        "tags": ["Sharing"],
+        "operationId": "setDatasetSharing",
+        "summary": "Change who the dataset is shared with",
+        "description": "Only the owner or an administrator may. A restricted dataset always keeps its owner, with WRITE access. Send `{\"restricted\": false}` to share with everyone again.",
+        "parameters": [{ "$ref": "#/components/parameters/IfMatch" }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Sharing" } } }
+        },
+        "responses": {
+          "200": {
+            "description": "The sharing as stored",
+            "headers": { "ETag": { "$ref": "#/components/headers/SharingETag" } },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Sharing" } } }
+          },
+          "400": { "$ref": "#/components/responses/InvalidRequest" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "412": { "$ref": "#/components/responses/StaleVersion" },
+          "422": { "$ref": "#/components/responses/ValidationFailed" },
+          "428": { "$ref": "#/components/responses/VersionRequired" },
+          "500": { "$ref": "#/components/responses/Internal" }
+        }
+      }
+    },
+    "/data-access/api/v2/datasets/{id}/sample": {
+      "parameters": [{ "$ref": "#/components/parameters/Id" }],
+      "post": {
+        "tags": ["Datasets"],
+        "operationId": "sampleDataset",
+        "summary": "Read sample rows from the dataset's source",
+        "description": "Not built yet: answers 501 until the source adapters (CWBA-62).",
+        "responses": {
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "501": { "$ref": "#/components/responses/NotImplemented" }
+        }
+      }
+    },
+    "/data-access/api/v2/datasets/{id}/publish": {
+      "parameters": [{ "$ref": "#/components/parameters/Id" }],
+      "post": {
+        "tags": ["Datasets"],
+        "operationId": "publishDataset",
+        "summary": "Publish the dataset for reports and analysis",
+        "description": "Not built yet: answers 501 until the generators (CWBA-63).",
+        "responses": {
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "501": { "$ref": "#/components/responses/NotImplemented" }
+        }
+      }
+    },
+    "/data-access/api/v2/openapi.json": {
+      "get": {
+        "tags": ["About this API"],
+        "operationId": "getOpenApi",
+        "summary": "This document",
+        "security": [],
+        "responses": { "200": { "description": "OpenAPI 3.1", "content": { "application/json": {} } } }
+      }
+    },
+    "/data-access/api/v2/dataset-definition.schema.json": {
+      "get": {
+        "tags": ["About this API"],
+        "operationId": "getDefinitionSchema",
+        "summary": "The JSON Schema of a dataset definition",
+        "security": [],
+        "responses": { "200": { "description": "JSON Schema 2020-12", "content": { "application/schema+json": {} } } }
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "Id": {
+        "name": "id", "in": "path", "required": true,
+        "description": "The dataset's id: letters, digits, '.', '-' and '_', starting with a letter or digit, at most 100 characters",
+        "schema": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$" }
+      },
+      "IfMatch": {
+        "name": "If-Match", "in": "header", "required": true,
+        "description": "The ETag from your last read. `*` means whatever is current (use with care). Weak tags (W/\"…\") are accepted.",
+        "schema": { "type": "string" }
+      },
+      "IfNoneMatch": {
+        "name": "If-None-Match", "in": "header", "required": false,
+        "description": "An ETag you hold; answers 304 if the dataset still has that version",
+        "schema": { "type": "string" }
+      }
+    },
+    "headers": {
+      "ETag": { "description": "The dataset's version; send it back as If-Match", "schema": { "type": "string" } },
+      "SharingETag": { "description": "The sharing's version (starts with `acl-`); send it back as If-Match", "schema": { "type": "string" } }
+    },
+    "requestBodies": {
+      "Definition": {
+        "required": true,
+        "description": "A dataset definition. Drafts may leave out everything but `name`; validate lists what publishing needs.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DatasetDefinition" } } }
+      }
+    },
+    "responses": {
+      "InvalidDefinition": { "description": "`invalid-definition`: the body is not a readable definition, or the id is not valid. `path` names the field.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "InvalidRequest": { "description": "`invalid-request`: the body can't be read. `path` names the field.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "ValidationFailed": { "description": "`validation-failed`: readable but incomplete or inconsistent; see `problems`", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "Forbidden": { "description": "`forbidden`: you don't have permission", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "NotFound": { "description": "`not-found`: no such dataset, or none you may see", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "AlreadyExists": { "description": "`already-exists`: the id is taken", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "StaleVersion": { "description": "`stale-version`: it changed since you read it; read it again and reapply your change", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "VersionRequired": { "description": "`version-required`: send If-Match", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "NotImplemented": { "description": "`not-implemented`: planned but not built yet", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "Internal": { "description": "`internal`: something else went wrong; the details are in the server log", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+    },
+    "schemas": {
+      "DatasetDefinition": { "$ref": "dataset-definition.schema.json" },
+      "DatasetList": {
+        "type": "object",
+        "required": ["datasets"],
+        "properties": {
+          "datasets": { "type": "array", "items": { "$ref": "#/components/schemas/DatasetSummary" } }
+        }
+      },
+      "DatasetSummary": {
+        "type": "object",
+        "required": ["id", "name", "version", "updated"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "owner": { "type": "string" },
+          "sourceType": { "type": "string", "enum": ["TABLES", "SQL", "FILE"] },
+          "version": { "type": "string", "description": "The same value as the dataset's ETag" },
+          "updated": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Validation": {
+        "type": "object",
+        "required": ["valid", "problems"],
+        "properties": {
+          "valid": { "type": "boolean" },
+          "problems": { "type": "array", "items": { "$ref": "#/components/schemas/Problem" } }
+        }
+      },
+      "Sharing": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "restricted": { "type": "boolean", "default": false, "description": "false: everyone with the data-access view permission. true: only the entries, the owner and administrators." },
+          "entries": { "type": "array", "maxItems": 500, "items": { "$ref": "#/components/schemas/ShareEntry" } }
+        },
+        "example": { "restricted": true, "entries": [{ "recipient": "suzy", "type": "USER", "access": "WRITE" }, { "recipient": "Sales", "type": "ROLE", "access": "READ" }] }
+      },
+      "ShareEntry": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["recipient", "type", "access"],
+        "properties": {
+          "recipient": { "type": "string", "minLength": 1, "maxLength": 255 },
+          "type": { "type": "string", "enum": ["USER", "ROLE"] },
+          "access": { "type": "string", "enum": ["READ", "WRITE"], "description": "READ: see and use it. WRITE: also change and delete it." }
+        }
+      },
+      "Problem": {
+        "type": "object",
+        "required": ["path", "message"],
+        "properties": {
+          "path": { "type": "string", "description": "The field at fault, such as `columns[1].name`; empty for the whole body" },
+          "message": { "type": "string" }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": ["code", "message"],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": ["invalid-definition", "invalid-request", "validation-failed", "forbidden", "not-found", "already-exists", "stale-version", "version-required", "not-implemented", "internal"]
+          },
+          "message": { "type": "string" },
+          "path": { "type": "string" },
+          "problems": { "type": "array", "items": { "$ref": "#/components/schemas/Problem" } }
+        }
+      }
+    }
+  }
+}

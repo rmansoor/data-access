@@ -39,6 +39,13 @@
   <bean class="org.pentaho.platform.dataaccess.datasource.api.resources.AnalysisResource"/>
   <bean class="org.pentaho.platform.dataaccess.datasource.api.resources.MetadataResource"/>
   <bean class="org.pentaho.platform.dataaccess.datasource.api.resources.JDBCDatasourceResource"/>
+
+  <!-- Datasets REST API v2 (/plugin/data-access/api/v2/datasets): definitions kept in /etc/datasets. -->
+  <bean id="datasetServiceFactory" class="org.pentaho.platform.dataaccess.dataset.service.PlatformDatasetServiceFactory"/>
+  <bean class="org.pentaho.platform.dataaccess.dataset.api.DatasetsResource">
+    <constructor-arg ref="datasetServiceFactory"/>
+  </bean>
+  <bean class="org.pentaho.platform.dataaccess.dataset.api.DatasetsApiDocResource"/>
   <bean class="org.pentaho.platform.dataaccess.datasource.wizard.service.impl.DatabaseDialectService"/>
   <bean class="org.pentaho.platform.dataaccess.datasource.wizard.service.impl.DataAccessPermissionResource" />
   <bean class="org.pentaho.platform.dataaccess.datasource.wizard.service.impl.DatabaseConnectionReaderWriter" scope="singleton"/>
