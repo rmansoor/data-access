@@ -261,6 +261,35 @@
         }
       }
     },
+    "/data-access/api/v2/settings/staging": {
+      "get": {
+        "tags": ["Datasets"],
+        "operationId": "getStagingSettings",
+        "summary": "Where uploaded files are loaded",
+        "description": "The connection and schema in effect, what an administrator saved, and the defaults from data-access/settings.xml (`data-access-staging-jndi`, `data-access-staging-schema`) used for anything not saved. Needs the permission to manage datasets.",
+        "responses": {
+          "200": { "description": "The settings", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/StagingState" } } } },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "500": { "$ref": "#/components/responses/Internal" },
+          "501": { "$ref": "#/components/responses/NotImplemented" }
+        }
+      },
+      "put": {
+        "tags": ["Datasets"],
+        "operationId": "setStagingSettings",
+        "summary": "Change where uploaded files are loaded",
+        "description": "Administrators only. Empty values go back to the settings.xml defaults. The connection must be one the server can open. Datasets already loaded keep their tables until they are next loaded, which moves them.",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/StagingSettings" } } } },
+        "responses": {
+          "200": { "description": "Saved", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/StagingState" } } } },
+          "400": { "$ref": "#/components/responses/InvalidRequest" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "422": { "$ref": "#/components/responses/ValidationFailed" },
+          "500": { "$ref": "#/components/responses/Internal" },
+          "501": { "$ref": "#/components/responses/NotImplemented" }
+        }
+      }
+    },
     "/data-access/api/v2/openapi.json": {
       "get": {
         "tags": ["About this API"],
@@ -402,6 +431,24 @@
             }
           },
           "truncated": { "type": "boolean", "description": "The connection has more tables than were listed" }
+        }
+      },
+      "StagingSettings": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "connection": { "type": "string", "description": "A database connection's name" },
+          "schema": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_$]{0,127}$" }
+        }
+      },
+      "StagingState": {
+        "type": "object",
+        "required": ["saved", "defaults"],
+        "properties": {
+          "connection": { "type": "string", "description": "In effect" },
+          "schema": { "type": "string", "description": "In effect" },
+          "saved": { "$ref": "#/components/schemas/StagingSettings" },
+          "defaults": { "$ref": "#/components/schemas/StagingSettings" }
         }
       },
       "Validation": {

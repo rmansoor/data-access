@@ -29,6 +29,8 @@ import org.pentaho.platform.dataaccess.dataset.service.DatasetShare.RecipientTyp
 import org.pentaho.platform.dataaccess.dataset.source.CsvSourceAdapter;
 import org.pentaho.platform.dataaccess.dataset.source.CsvStager;
 import org.pentaho.platform.dataaccess.dataset.source.DatasetFiles;
+import org.pentaho.platform.dataaccess.dataset.source.StagingConfig;
+import org.pentaho.platform.dataaccess.dataset.source.StagingSettings;
 import org.pentaho.platform.dataaccess.dataset.source.SourceAdapters;
 import org.pentaho.platform.dataaccess.dataset.source.SourceLimits;
 import org.pentaho.platform.dataaccess.dataset.source.TestConnections;
@@ -62,6 +64,9 @@ public class DatasetStagingTest {
   private InMemoryDatasetSharing sharing;
   private DatasetService service;
   private DatasetFiles files;
+  private Connection other;
+  private StagingConfig config;
+  private boolean admin;
 
   @Before
   public void setUp() throws Exception {
@@ -72,9 +77,14 @@ public class DatasetStagingTest {
       Path p = folder.getRoot().toPath().resolve( name );
       return Files.exists( p ) ? Optional.of( p ) : Optional.empty();
     } ), SourceLimits.standard() );
+    other = DriverManager.getConnection( "jdbc:hsqldb:mem:other" + UUID.randomUUID(), "SA", "" );
+    org.pentaho.platform.dataaccess.dataset.source.ConnectionProvider staging = TestConnections.pooled( db, "Staging" );
+    org.pentaho.platform.dataaccess.dataset.source.ConnectionProvider second = TestConnections.pooled( other, "Other" );
+    org.pentaho.platform.dataaccess.dataset.source.ConnectionProvider connections =
+      name -> "Other".equals( name ) ? second.open( name ) : staging.open( name );
+    config = new StagingConfig( new StagingSettings.InMemoryStore(), () -> "Staging", () -> null );
     AtomicLong clock = new AtomicLong( 1_800_000_000_000L );
-    CsvStager stager = new CsvStager( csv, TestConnections.pooled( db, "Staging" ), () -> "Staging", () -> null, 1000,
-      clock::incrementAndGet );
+    CsvStager stager = new CsvStager( csv, connections, config::connection, config::schema, 1000, clock::incrementAndGet );
     sharing = new InMemoryDatasetSharing( () -> user, List::of );
     service = new DatasetService( new InMemoryDatasetStore(), new DatasetPermissions() {
       @Override
@@ -86,12 +96,18 @@ public class DatasetStagingTest {
       public boolean canManage() {
         return true;
       }
-    }, () -> user, sharing, new SourceAdapters( List.of( csv ), stager, files ) );
+
+      @Override
+      public boolean canAdminister() {
+        return admin;
+      }
+    }, () -> user, sharing, new SourceAdapters( List.of( csv ), stager, files ).withStaging( config, connections ) );
   }
 
   @After
   public void tearDown() throws Exception {
     db.close();
+    other.close();
   }
 
   private StoredDataset create( String name, Source source ) {
@@ -324,6 +340,43 @@ public class DatasetStagingTest {
       rs.getLong( 2 );
       assertTrue( "a misfit loads as empty", rs.wasNull() );
     }
+  }
+
+  private List<String> tables( Connection c ) throws Exception {
+    List<String> names = new ArrayList<>();
+    try ( ResultSet rs = c.getMetaData().getTables( null, null, "DS_%", new String[] { "TABLE" } ) ) {
+      while ( rs.next() ) {
+        names.add( rs.getString( "TABLE_NAME" ) );
+      }
+    }
+    return names;
+  }
+
+  @Test
+  public void letsAnAdministratorMoveWhereFilesAreLoaded() throws Exception {
+    DatasetService.StagingState state = service.getStaging();
+    assertEquals( "Staging", state.getConnection() );
+    assertEquals( "Staging", state.getDefaults().getConnection() );
+    assertEquals( null, state.getSaved().getConnection() );
+
+    expect( Code.FORBIDDEN, () -> service.setStaging( new StagingSettings( "Other", null ) ) );
+    admin = true;
+    assertEquals( "connection", expect( Code.VALIDATION_FAILED, () -> service.setStaging( new StagingSettings( "Gone", null ) ) ).getPath() );
+    assertEquals( "schema", expect( Code.VALIDATION_FAILED, () -> service.setStaging( new StagingSettings( null, "x; drop" ) ) ).getPath() );
+
+    StoredDataset v1 = create( "Orders", csv( "orders.csv" ) );
+    StoredDataset v2 = service.stage( "orders", v1.getVersion() ).getDataset();
+    assertEquals( 1, tables( db ).size() );
+
+    assertEquals( "Other", service.setStaging( new StagingSettings( "Other", "" ) ).getConnection() );
+    DatasetService.Staging moved = service.stage( "orders", v2.getVersion() );
+    assertEquals( "Other", moved.getTable().getConnection() );
+    assertEquals( "Other", moved.getDataset().getDefinition().getSource().getConnection() );
+    assertEquals( "the old table is dropped from where it was", 0, tables( db ).size() );
+    assertEquals( 1, tables( other ).size() );
+
+    service.setStaging( new StagingSettings( null, null ) );
+    assertEquals( "back to settings.xml", "Staging", service.getStaging().getConnection() );
   }
 
   private static DatasetApiException expect( Code code, Runnable call ) {

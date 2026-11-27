@@ -27,6 +27,8 @@ import org.pentaho.platform.dataaccess.dataset.source.CsvStager;
 import org.pentaho.platform.dataaccess.dataset.source.DatasetFiles;
 import org.pentaho.platform.dataaccess.dataset.source.Sample;
 import org.pentaho.platform.dataaccess.dataset.source.StagedTable;
+import org.pentaho.platform.dataaccess.dataset.source.StagingConfig;
+import org.pentaho.platform.dataaccess.dataset.source.StagingSettings;
 import org.pentaho.platform.dataaccess.dataset.source.TableList;
 import org.pentaho.platform.dataaccess.dataset.source.SourceAdapters;
 import org.pentaho.platform.dataaccess.dataset.source.SourceLimits;
@@ -254,6 +256,70 @@ public class DatasetService {
   public TableList connectionTables( String connection ) {
     requireManage();
     return sources.tables().list( connection );
+  }
+
+  /** Where uploaded files are loaded: in effect, as saved by an administrator, and the settings.xml defaults. */
+  public static final class StagingState {
+    private final String connection;
+    private final String schema;
+    private final StagingSettings saved;
+    private final StagingSettings defaults;
+
+    StagingState( StagingConfig config ) {
+      this.connection = config.connection();
+      this.schema = config.schema();
+      this.saved = config.saved();
+      this.defaults = config.defaults();
+    }
+
+    public String getConnection() {
+      return connection;
+    }
+
+    public String getSchema() {
+      return schema;
+    }
+
+    public StagingSettings getSaved() {
+      return saved;
+    }
+
+    public StagingSettings getDefaults() {
+      return defaults;
+    }
+  }
+
+  /** Where uploaded files are loaded. For people who manage datasets. */
+  public StagingState getStaging() {
+    requireManage();
+    return new StagingState( sources.staging() );
+  }
+
+  /**
+   * Sets where uploaded files are loaded from now on; empty values go back to settings.xml.
+   * Administrators only. Datasets already loaded keep their tables until they are next loaded.
+   */
+  public StagingState setStaging( StagingSettings settings ) {
+    if ( !permissions.canAdminister() ) {
+      throw new DatasetApiException( Code.FORBIDDEN, "Only an administrator can change where uploaded files are loaded" );
+    }
+    if ( settings == null ) {
+      throw new DatasetApiException( Code.INVALID_REQUEST, "Send the staging settings as JSON in the request body" );
+    }
+    String schema = settings.getSchema();
+    if ( schema != null && !schema.matches( "[A-Za-z_][A-Za-z0-9_$]{0,127}" ) ) {
+      String why = "must be a plain schema name (letters, digits, _ and $)";
+      throw new DatasetApiException( Code.VALIDATION_FAILED, "schema", "The schema " + why,
+        List.of( new DatasetProblem( "schema", why ) ), null );
+    }
+    if ( settings.getConnection() != null && !sources.connectionExists( settings.getConnection() ) ) {
+      String why = "names no connection this server can open (\"" + settings.getConnection() + "\")";
+      throw new DatasetApiException( Code.VALIDATION_FAILED, "connection", "The connection " + why,
+        List.of( new DatasetProblem( "connection", why ) ), null );
+    }
+    StagingConfig config = sources.staging();
+    config.save( settings );
+    return new StagingState( config );
   }
 
   /** A dataset after its file was loaded, and the table it was loaded into. */
