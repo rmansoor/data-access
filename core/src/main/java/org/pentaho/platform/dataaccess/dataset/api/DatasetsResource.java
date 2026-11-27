@@ -45,6 +45,7 @@ import org.pentaho.platform.dataaccess.dataset.service.StoredDataset;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.io.InputStream;
 import java.util.List;
 import java.util.function.Supplier;
 
@@ -188,6 +189,23 @@ public class DatasetsResource {
   @Path( "{id}/sample" )
   public Response sample( @PathParam( "id" ) String id, @QueryParam( "limit" ) Integer limit, @QueryParam( "table" ) String table ) {
     return handle( () -> Response.ok( mapper.writeValueAsString( service.get().sample( id, limit, table ) ) ).build() );
+  }
+
+  /**
+   * Uploads the dataset's CSV file: the request body is the file itself (any content type), and
+   * {@code name} its file name on the uploader's computer. Requires If-Match with the version last
+   * read; answers the definition, now naming the stored file, with its new ETag. 413 when the file
+   * is too large, 415 when it isn't a text file.
+   */
+  @PUT
+  @Path( "{id}/file" )
+  @Consumes( MediaType.WILDCARD )
+  public Response uploadFile( @PathParam( "id" ) String id, @HeaderParam( HttpHeaders.IF_MATCH ) String ifMatch,
+                              @QueryParam( "name" ) String name, InputStream body ) {
+    return handle( () -> {
+      DatasetService s = service.get();
+      return definition( Response.ok(), s.uploadFile( id, expected( s, id, ifMatch ), name, body ) );
+    } );
   }
 
   /**

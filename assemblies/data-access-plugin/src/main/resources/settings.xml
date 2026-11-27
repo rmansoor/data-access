@@ -46,6 +46,10 @@
   <!-- settings for Agile Data Access -->
   <data-access-staging-jndi>Hibernate</data-access-staging-jndi>
 
+  <!-- Datasets: the largest CSV file that can be uploaded to a dataset, in MB (500 when unset).
+       Uploaded files are kept in system/data-access/uploads, one folder per dataset. -->
+  <!-- <data-access-dataset-upload-max-mb>500</data-access-dataset-upload-max-mb> -->
+
   <data-access-datasource-solution-storage>admin</data-access-datasource-solution-storage>
   <data-access-csv-sample-rows>10000</data-access-csv-sample-rows>
   <data-access-datasource-illegal-characters><![CDATA[$<>?&#%^*()!~:;[]{}|]]></data-access-datasource-illegal-characters>

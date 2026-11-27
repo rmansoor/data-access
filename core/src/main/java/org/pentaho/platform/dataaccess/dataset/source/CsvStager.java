@@ -16,6 +16,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.pentaho.di.core.exception.KettleException;
 import org.pentaho.di.core.row.ValueMetaInterface;
+import org.pentaho.platform.dataaccess.dataset.DatasetDefinition.Column;
 import org.pentaho.platform.dataaccess.dataset.DatasetDefinition.ColumnType;
 import org.pentaho.platform.dataaccess.dataset.DatasetDefinition.Source;
 import org.pentaho.platform.dataaccess.dataset.service.DatasetApiException;
@@ -97,10 +98,20 @@ public class CsvStager {
     return name.trim();
   }
 
-  /** Loads the file into a new table on {@link #connection()}. */
+  /** Loads the file into a new table on {@link #connection()}, with the types detected from its first lines. */
   public StagedTable stage( String datasetId, Source source ) {
+    return stage( datasetId, source, List.of() );
+  }
+
+  /**
+   * Loads the file into a new table on {@link #connection()}. A column the dataset defines (matched
+   * by {@code sourceName}, else {@code name}) is loaded as the type the dataset gives it: values
+   * that don't fit that type are loaded as empty and counted in a warning, rather than changing the
+   * type the user chose. Other columns use the detected type.
+   */
+  public StagedTable stage( String datasetId, Source source, List<Column> columns ) {
     CsvSourceAdapter.CsvFile file = csv.open( source );
-    Profile profile = profile( file );
+    Profile profile = profile( file, columns == null ? List.of() : columns );
     String connection = connection();
     try ( Connection c = open( connection ) ) {
       boolean autoCommit = c.getAutoCommit();
@@ -143,6 +154,11 @@ public class CsvStager {
     final int[] maxLength;
     final int[] integerDigits;
     final int[] scale;
+    /** The column's type was chosen in the dataset definition, not detected. */
+    final boolean[] chosen;
+    /** For chosen columns: values that didn't fit, and the first of them. */
+    final long[] misfits;
+    final String[] firstMisfit;
     final List<String> warnings = new ArrayList<>();
     long rows;
     long wideLines;
@@ -154,8 +170,26 @@ public class CsvStager {
       maxLength = new int[ width ];
       integerDigits = new int[ width ];
       scale = new int[ width ];
+      chosen = new boolean[ width ];
+      misfits = new long[ width ];
+      firstMisfit = new String[ width ];
       for ( int i = 0; i < width; i++ ) {
         types[ i ] = detected.columns.get( i ).getType();
+      }
+    }
+
+    /** Takes the types the dataset gives its columns. */
+    void choose( List<Column> columns ) {
+      for ( int i = 0; i < width(); i++ ) {
+        String name = detected.columns.get( i ).getName();
+        for ( Column col : columns ) {
+          String source = col.getSourceName() != null ? col.getSourceName() : col.getName();
+          if ( col.getType() != null && name != null && name.equals( source ) ) {
+            types[ i ] = col.getType();
+            chosen[ i ] = true;
+            break;
+          }
+        }
       }
     }
 
@@ -170,7 +204,7 @@ public class CsvStager {
     }
   }
 
-  private Profile profile( CsvSourceAdapter.CsvFile file ) {
+  private Profile profile( CsvSourceAdapter.CsvFile file, List<Column> columns ) {
     try {
       List<List<String>> head = new ArrayList<>();
       CsvSourceAdapter.eachLine( file, ( values, n ) -> {
@@ -181,6 +215,7 @@ public class CsvStager {
       if ( p.width() == 0 ) {
         throw JdbcSourceSupport.invalid( CsvSourceAdapter.FILE + ".path", "names an empty file" );
       }
+      p.choose( columns );
       CsvSourceAdapter.eachLine( file, ( values, n ) -> {
         if ( n <= file.header ) {
           return true;
@@ -196,6 +231,12 @@ public class CsvStager {
         }
         return true;
       } );
+      for ( int c = 0; c < p.width(); c++ ) {
+        if ( p.misfits[ c ] > 0 ) {
+          p.warn( "Column \"" + p.detected.columns.get( c ).getName() + "\" has " + p.misfits[ c ] + " value(s) that aren't "
+            + describe( p.types[ c ] ) + " (first: " + p.firstMisfit[ c ] + "); they were loaded as empty" );
+        }
+      }
       if ( p.wideLines > 0 ) {
         p.warn( p.wideLines + " line(s) had more values than the " + p.width() + " columns detected; the extra values were left out" );
       }
@@ -215,9 +256,15 @@ public class CsvStager {
     }
     Object v;
     try {
-      v = CsvSourceAdapter.parse( text, p.detected.metas.get( c ), p.types[ c ] );
+      v = value( p, c, text );
     } catch ( KettleException | RuntimeException e ) {
       v = null;
+    }
+    if ( v == null && p.chosen[ c ] ) {
+      if ( p.misfits[ c ]++ == 0 ) {
+        p.firstMisfit[ c ] = "line " + line + ", \"" + abbreviate( text ) + "\"";
+      }
+      return;
     }
     if ( v == null ) {
       p.warn( "Column \"" + p.detected.columns.get( c ).getName() + "\" was detected as " + p.types[ c ] + " but line " + line
@@ -230,6 +277,90 @@ public class CsvStager {
       int s = Math.max( 0, d.scale() );
       p.scale[ c ] = Math.max( p.scale[ c ], s );
       p.integerDigits[ c ] = Math.max( p.integerDigits[ c ], Math.max( 1, d.precision() - d.scale() ) );
+    }
+  }
+
+  /**
+   * The text as the column's type: through the detected Kettle meta when the type is the detected
+   * one, otherwise with plain parsing for the type the dataset chose.
+   */
+  static Object value( Profile p, int c, String text ) throws KettleException {
+    ColumnType type = p.types[ c ];
+    if ( !p.chosen[ c ] || type == p.detected.columns.get( c ).getType() ) {
+      return CsvSourceAdapter.parse( text, p.detected.metas.get( c ), type );
+    }
+    return parseAs( text, type );
+  }
+
+  /** Plain parsing for a type the dataset chose: null for null or empty text; throws when it doesn't fit. */
+  static Object parseAs( String text, ColumnType type ) {
+    if ( text == null || type == ColumnType.STRING ) {
+      return text;
+    }
+    String t = text.trim();
+    if ( t.isEmpty() ) {
+      return null;
+    }
+    switch ( type ) {
+      case INTEGER:
+        return Long.parseLong( t.startsWith( "+" ) ? t.substring( 1 ) : t );
+      case DECIMAL:
+        return new BigDecimal( t );
+      case BOOLEAN:
+        switch ( t.toLowerCase( Locale.ROOT ) ) {
+          case "true": case "yes": case "y": case "t": case "1":
+            return Boolean.TRUE;
+          case "false": case "no": case "n": case "f": case "0":
+            return Boolean.FALSE;
+          default:
+            throw new IllegalArgumentException( t );
+        }
+      case DATE:
+        return parseDate( t, false );
+      case TIMESTAMP:
+        return parseDate( t, true );
+      default:
+        return text;
+    }
+  }
+
+  /** ISO first, then the wizard's date formats; strict. An ISO date or timestamp string. */
+  private static String parseDate( String t, boolean withTime ) {
+    try {
+      if ( withTime ) {
+        return LocalDateTime.parse( t.replace( ' ', 'T' ) ).toString();
+      }
+      return LocalDate.parse( t ).toString();
+    } catch ( java.time.format.DateTimeParseException e ) {
+      // Try the other formats.
+    }
+    for ( String mask : org.pentaho.platform.dataaccess.datasource.wizard.models.ColumnInfo.DATE_FORMATS ) {
+      java.text.SimpleDateFormat f = new java.text.SimpleDateFormat( mask, Locale.ROOT );
+      f.setLenient( false );
+      java.text.ParsePosition pos = new java.text.ParsePosition( 0 );
+      java.util.Date d = f.parse( t, pos );
+      if ( d != null && pos.getIndex() == t.length() ) {
+        LocalDateTime when = new Timestamp( d.getTime() ).toLocalDateTime();
+        return withTime ? when.toString() : when.toLocalDate().toString();
+      }
+    }
+    throw new IllegalArgumentException( t );
+  }
+
+  private static String describe( ColumnType type ) {
+    switch ( type ) {
+      case INTEGER:
+        return "whole numbers";
+      case DECIMAL:
+        return "numbers";
+      case BOOLEAN:
+        return "yes/no values";
+      case DATE:
+        return "dates";
+      case TIMESTAMP:
+        return "dates and times";
+      default:
+        return "text";
     }
   }
 
@@ -307,9 +438,13 @@ public class CsvStager {
     ColumnType type = p.types[ c ];
     Object v;
     try {
-      v = CsvSourceAdapter.parse( text, p.detected.metas.get( c ), type );
-    } catch ( KettleException e ) {
-      throw new SQLException( "\"" + abbreviate( text ) + "\" no longer reads as " + type, e );
+      v = value( p, c, text );
+    } catch ( KettleException | RuntimeException e ) {
+      if ( !p.chosen[ c ] ) {
+        throw new SQLException( "\"" + abbreviate( text ) + "\" no longer reads as " + type, e );
+      }
+      // Counted in the first pass: a chosen type's misfits load as empty.
+      v = null;
     }
     if ( v == null ) {
       ps.setNull( index, sqlType( type ) );

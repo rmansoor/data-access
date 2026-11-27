@@ -209,6 +209,9 @@ public class DatasetsResourceTest {
     assertEquals( 501, resource.sample( "monthly-orders", null, null ).getStatus() );
     assertEquals( "loading needs the version", 428, resource.stage( "monthly-orders", null ).getStatus() );
     assertEquals( 501, resource.stage( "monthly-orders", "*" ).getStatus() );
+    java.io.InputStream body = new java.io.ByteArrayInputStream( "a\n1\n".getBytes( java.nio.charset.StandardCharsets.UTF_8 ) );
+    assertEquals( "uploading needs the version", 428, resource.uploadFile( "monthly-orders", null, "a.csv", body ).getStatus() );
+    assertEquals( 501, resource.uploadFile( "monthly-orders", "*", "a.csv", body ).getStatus() );
     Response publish = resource.publish( "monthly-orders" );
     assertEquals( 501, publish.getStatus() );
     assertTrue( body( publish ).get( "message" ).asText().contains( "CWBA-63" ) );

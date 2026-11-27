@@ -353,6 +353,11 @@
 
         <!-- REST /plugin/data-access/api/* -->
 
+        <!-- POST, PUT, DELETE /plugin/data-access/api/v2/* (datasets, connections) -->
+        <swm:regex-request-matcher pattern="^/plugin/data-access/api/v2/.*" methods="POST" />
+        <swm:regex-request-matcher pattern="^/plugin/data-access/api/v2/.*" methods="PUT" />
+        <swm:regex-request-matcher pattern="^/plugin/data-access/api/v2/.*" methods="DELETE" />
+
         <!-- POST /plugin/data-access/api/datasource/analysis/{id}/remove -->
         <swm:regex-request-matcher pattern="^/plugin/data-access/api/datasource/analysis/[^/]*/remove\b.*" methods="POST" />
 

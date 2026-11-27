@@ -28,10 +28,12 @@ import org.pentaho.platform.dataaccess.dataset.service.DatasetShare.Entry;
 import org.pentaho.platform.dataaccess.dataset.service.DatasetShare.RecipientType;
 import org.pentaho.platform.dataaccess.dataset.source.CsvSourceAdapter;
 import org.pentaho.platform.dataaccess.dataset.source.CsvStager;
+import org.pentaho.platform.dataaccess.dataset.source.DatasetFiles;
 import org.pentaho.platform.dataaccess.dataset.source.SourceAdapters;
 import org.pentaho.platform.dataaccess.dataset.source.SourceLimits;
 import org.pentaho.platform.dataaccess.dataset.source.TestConnections;
 
+import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -42,6 +44,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Stream;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.Assert.assertEquals;
@@ -58,15 +61,17 @@ public class DatasetStagingTest {
   private String user = "suzy";
   private InMemoryDatasetSharing sharing;
   private DatasetService service;
+  private DatasetFiles files;
 
   @Before
   public void setUp() throws Exception {
     db = DriverManager.getConnection( "jdbc:hsqldb:mem:svc" + UUID.randomUUID(), "SA", "" );
     Files.write( folder.getRoot().toPath().resolve( "orders.csv" ), "id,amount\n1,2.50\n2,3.75\n".getBytes( StandardCharsets.UTF_8 ) );
-    CsvSourceAdapter csv = new CsvSourceAdapter( name -> {
+    files = new DatasetFiles( () -> folder.getRoot().toPath().resolve( "uploads" ), 1024 * 1024 );
+    CsvSourceAdapter csv = new CsvSourceAdapter( name -> files.locate( name ).or( () -> {
       Path p = folder.getRoot().toPath().resolve( name );
       return Files.exists( p ) ? Optional.of( p ) : Optional.empty();
-    }, SourceLimits.standard() );
+    } ), SourceLimits.standard() );
     AtomicLong clock = new AtomicLong( 1_800_000_000_000L );
     CsvStager stager = new CsvStager( csv, TestConnections.pooled( db, "Staging" ), () -> "Staging", () -> null, 1000,
       clock::incrementAndGet );
@@ -81,7 +86,7 @@ public class DatasetStagingTest {
       public boolean canManage() {
         return true;
       }
-    }, () -> user, sharing, new SourceAdapters( List.of( csv ), stager ) );
+    }, () -> user, sharing, new SourceAdapters( List.of( csv ), stager, files ) );
   }
 
   @After
@@ -193,6 +198,98 @@ public class DatasetStagingTest {
     d.setSource( csv( "orders.csv" ) );
     StoredDataset v1 = plain.create( d );
     expect( Code.NOT_IMPLEMENTED, () -> plain.stage( "orders", v1.getVersion() ) );
+  }
+
+  private static ByteArrayInputStream csvBytes( String text ) {
+    return new ByteArrayInputStream( text.getBytes( StandardCharsets.UTF_8 ) );
+  }
+
+  private long uploads() throws Exception {
+    Path root = folder.getRoot().toPath().resolve( "uploads" );
+    if ( !Files.exists( root ) ) {
+      return 0;
+    }
+    try ( Stream<Path> s = Files.walk( root ) ) {
+      return s.filter( Files::isRegularFile ).count();
+    }
+  }
+
+  @Test
+  public void uploadsAFileToADraftAndLoadsIt() throws Exception {
+    DatasetDefinition d = new DatasetDefinition();
+    d.setName( "Sales" );
+    StoredDataset v1 = service.create( d );
+
+    StoredDataset v2 = service.uploadFile( "sales", v1.getVersion(), "C:\\data\\Sales Q1.csv", csvBytes( "region,units\nEMEA,3\nNA,4\n" ) );
+    Source source = v2.getDefinition().getSource();
+    assertEquals( SourceType.FILE, source.getType() );
+    assertTrue( source.getFile().isHeaderRow() );
+    assertEquals( "Sales Q1.csv", source.getFile().getOriginalName() );
+    assertTrue( DatasetFiles.isStored( source.getFile().getPath() ) );
+
+    DatasetService.Staging staged = service.stage( "sales", v2.getVersion() );
+    assertEquals( 2, staged.getTable().getRows() );
+  }
+
+  @Test
+  public void replacingTheFileDeletesTheOldOneAndDeletingTheDatasetDeletesItsFiles() throws Exception {
+    StoredDataset v1 = create( "Orders", csv( "orders.csv" ) );
+    StoredDataset v2 = service.uploadFile( "orders", v1.getVersion(), "a.csv", csvBytes( "x\n1\n" ) );
+    StoredDataset v3 = service.uploadFile( "orders", v2.getVersion(), "b.csv", csvBytes( "x\n2\n" ) );
+    assertEquals( 1, uploads() );
+    assertEquals( "b.csv", v3.getDefinition().getSource().getFile().getOriginalName() );
+
+    service.delete( "orders", v3.getVersion() );
+    assertEquals( 0, uploads() );
+  }
+
+  @Test
+  public void storesNothingForAStaleVersionOrAnotherKindOfSource() throws Exception {
+    StoredDataset v1 = create( "Orders", csv( "orders.csv" ) );
+    service.uploadFile( "orders", v1.getVersion(), "a.csv", csvBytes( "x\n1\n" ) );
+    expect( Code.STALE_VERSION, () -> service.uploadFile( "orders", v1.getVersion(), "b.csv", csvBytes( "x\n2\n" ) ) );
+
+    Source sql = new Source();
+    sql.setType( SourceType.SQL );
+    sql.setConnection( "Staging" );
+    sql.setSql( "SELECT 1" );
+    StoredDataset q = create( "Query", sql );
+    assertEquals( "source.type", expect( Code.INVALID_REQUEST, () -> service.uploadFile( "query", q.getVersion(), "a.csv",
+      csvBytes( "x" ) ) ).getPath() );
+    assertEquals( 1, uploads() );
+  }
+
+  @Test
+  public void loadsColumnsAsTheTypesTheDatasetChose() throws Exception {
+    DatasetDefinition d = new DatasetDefinition();
+    d.setName( "Typed" );
+    StoredDataset v1 = service.create( d );
+    StoredDataset v2 = service.uploadFile( "typed", v1.getVersion(), "t.csv",
+      csvBytes( "code,qty,day\n007,5,2026-01-31\n008,n/a,2026-02-01\n009,7,2026-02-02\n" ) );
+    DatasetDefinition typed = v2.getDefinition();
+    DatasetDefinition.Column code = new DatasetDefinition.Column();
+    code.setName( "code" );
+    code.setType( DatasetDefinition.ColumnType.STRING );
+    DatasetDefinition.Column qty = new DatasetDefinition.Column();
+    qty.setName( "qty" );
+    qty.setType( DatasetDefinition.ColumnType.INTEGER );
+    typed.setColumns( new ArrayList<>( List.of( code, qty ) ) );
+    StoredDataset v3 = service.update( "typed", typed, v2.getVersion() );
+
+    DatasetService.Staging staged = service.stage( "typed", v3.getVersion() );
+    assertEquals( "[code->CODE:STRING(VARCHAR(3)), qty->QTY:INTEGER(BIGINT), day->DAY:DATE(DATE)]",
+      staged.getTable().getColumns().toString() );
+    assertEquals( List.of( "Column \"qty\" has 1 value(s) that aren't whole numbers (first: line 3, \"n/a\"); they were loaded as empty" ),
+      staged.getTable().getWarnings() );
+    try ( java.sql.Statement st = db.createStatement();
+          ResultSet rs = st.executeQuery( "SELECT CODE, QTY FROM \"" + staged.getTable().getTable() + "\" ORDER BY CODE" ) ) {
+      rs.next();
+      assertEquals( "007", rs.getString( 1 ) );
+      assertEquals( 5, rs.getLong( 2 ) );
+      rs.next();
+      rs.getLong( 2 );
+      assertTrue( "a misfit loads as empty", rs.wasNull() );
+    }
   }
 
   private static DatasetApiException expect( Code code, Runnable call ) {

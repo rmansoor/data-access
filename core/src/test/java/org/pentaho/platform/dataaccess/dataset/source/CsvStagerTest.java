@@ -234,6 +234,29 @@ public class CsvStagerTest {
     assertEquals( "abcde", CsvStager.identifier( "abcde_fgh", "c", 6 ) );
   }
 
+  @Test
+  public void parsesTheTypesADatasetChoosesStrictly() {
+    assertEquals( 42L, CsvStager.parseAs( " +42 ", ColumnType.INTEGER ) );
+    assertEquals( new BigDecimal( "-1.50" ), CsvStager.parseAs( "-1.50", ColumnType.DECIMAL ) );
+    assertEquals( Boolean.TRUE, CsvStager.parseAs( "Yes", ColumnType.BOOLEAN ) );
+    assertEquals( Boolean.FALSE, CsvStager.parseAs( "0", ColumnType.BOOLEAN ) );
+    assertEquals( "2026-01-31", CsvStager.parseAs( "2026-01-31", ColumnType.DATE ) );
+    assertEquals( "2026-01-31", CsvStager.parseAs( "01/31/2026", ColumnType.DATE ) );
+    assertEquals( "2026-01-31T09:30", CsvStager.parseAs( "2026-01-31 09:30", ColumnType.TIMESTAMP ) );
+    assertEquals( "2026-01-31T00:00", CsvStager.parseAs( "2026-01-31", ColumnType.TIMESTAMP ) );
+    assertNull( CsvStager.parseAs( "  ", ColumnType.INTEGER ) );
+    assertEquals( "007", CsvStager.parseAs( "007", ColumnType.STRING ) );
+    for ( Object[] bad : new Object[][] { { "1.5", ColumnType.INTEGER }, { "n/a", ColumnType.DECIMAL },
+      { "maybe", ColumnType.BOOLEAN }, { "31/31/2026", ColumnType.DATE } } ) {
+      try {
+        CsvStager.parseAs( (String) bad[ 0 ], (ColumnType) bad[ 1 ] );
+        fail( "parsed " + bad[ 0 ] + " as " + bad[ 1 ] );
+      } catch ( RuntimeException expected ) {
+        // refused
+      }
+    }
+  }
+
   private static DatasetApiException expect( Code code, Runnable call ) {
     try {
       call.run();

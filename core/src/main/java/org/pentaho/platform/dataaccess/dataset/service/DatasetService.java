@@ -24,12 +24,14 @@ import org.pentaho.platform.dataaccess.dataset.DatasetDefinition.FileSource;
 import org.pentaho.platform.dataaccess.dataset.DatasetDefinition.Source;
 import org.pentaho.platform.dataaccess.dataset.DatasetDefinition.SourceType;
 import org.pentaho.platform.dataaccess.dataset.source.CsvStager;
+import org.pentaho.platform.dataaccess.dataset.source.DatasetFiles;
 import org.pentaho.platform.dataaccess.dataset.source.Sample;
 import org.pentaho.platform.dataaccess.dataset.source.StagedTable;
 import org.pentaho.platform.dataaccess.dataset.source.TableList;
 import org.pentaho.platform.dataaccess.dataset.source.SourceAdapters;
 import org.pentaho.platform.dataaccess.dataset.source.SourceLimits;
 
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -154,6 +156,74 @@ public class DatasetService {
     if ( staged != null && sources.canStage() ) {
       sources.stager().drop( d.getSource().getConnection(), staged );
     }
+    if ( sources.hasFiles() ) {
+      sources.files().deleteAll( id );
+    }
+  }
+
+  /**
+   * Stores a CSV file as the dataset's source file: {@code source.file.path} then names it, and
+   * {@code source.file.originalName} records the uploader's file name. A dataset without a source
+   * gets a FILE source (CSV, header row). The file it replaces is deleted; its staging table stays
+   * until the next load replaces it. Needs the version the caller read, checked before the upload
+   * is read so a stale change doesn't store anything.
+   *
+   * @param originalName the file's name on the uploader's computer; may be null
+   */
+  public StoredDataset uploadFile( String id, String expectedVersion, String originalName, InputStream body ) {
+    requireManage();
+    requireValidId( id, "" );
+    requireVersion( expectedVersion );
+    StoredDataset current = writable( id );
+    if ( !current.getVersion().equals( expectedVersion ) ) {
+      throw new DatasetApiException( Code.STALE_VERSION, "The dataset changed since it was read; read it again before uploading" );
+    }
+    DatasetDefinition d = json.read( json.write( current.getDefinition() ) );
+    Source source = d.getSource();
+    if ( source == null ) {
+      source = new Source();
+      source.setType( SourceType.FILE );
+      d.setSource( source );
+    } else if ( source.getType() != SourceType.FILE ) {
+      throw new DatasetApiException( Code.INVALID_REQUEST, "source.type",
+        "Files can only be uploaded to a FILE source; this dataset's source is " + source.getType(), null, null );
+    }
+    FileSource file = source.getFile();
+    if ( file == null ) {
+      file = new FileSource();
+      file.setFormat( DatasetDefinition.FileFormat.CSV );
+      file.setHeaderRow( true );
+      source.setFile( file );
+    }
+    DatasetFiles files = sources.files();
+    String stored = files.store( id, originalName, body );
+    String previous = file.getPath();
+    file.setPath( stored );
+    file.setOriginalName( displayName( originalName ) );
+    StoredDataset updated;
+    try {
+      updated = store.update( d, expectedVersion );
+    } catch ( RuntimeException e ) {
+      files.delete( stored );
+      throw e;
+    }
+    if ( previous != null && !previous.equals( stored ) && DatasetFiles.isStored( previous ) ) {
+      files.delete( previous );
+    }
+    return updated;
+  }
+
+  /** "C:\\Users\\suzy\\Sales 2026.csv" -> "Sales 2026.csv": the base name, without control characters, at most 255. */
+  static String displayName( String originalName ) {
+    if ( originalName == null ) {
+      return null;
+    }
+    String n = originalName.substring( Math.max( originalName.lastIndexOf( '/' ), originalName.lastIndexOf( '\\' ) ) + 1 )
+      .replaceAll( "\\p{Cntrl}", "" ).trim();
+    if ( n.isEmpty() ) {
+      return null;
+    }
+    return n.length() > 255 ? n.substring( 0, 255 ) : n;
   }
 
   /**
@@ -233,7 +303,7 @@ public class DatasetService {
         List.of( new DatasetProblem( "source.connection", why ) ), null );
     }
     String previous = stagedTable( d );
-    StagedTable table = stager.stage( id, source );
+    StagedTable table = stager.stage( id, source, d.getColumns() );
     source.setConnection( connection );
     source.getFile().setStagingTable( table.getTable() );
     StoredDataset updated;

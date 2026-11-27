@@ -185,13 +185,39 @@
         }
       }
     },
+    "/data-access/api/v2/datasets/{id}/file": {
+      "parameters": [{ "$ref": "#/components/parameters/Id" }],
+      "put": {
+        "tags": ["Datasets"],
+        "operationId": "uploadDatasetFile",
+        "summary": "Upload the dataset's CSV file",
+        "description": "The request body is the file itself, sent as is (any content type, such as text/csv). The server stores it under a name it chooses, in a folder for the dataset that isn't served to browsers, and sets `source.file.path` and `source.file.originalName`. A dataset without a source gets a FILE source (CSV, header row). The file it replaces is deleted; the staging table stays until the next load. The largest file accepted is set by `data-access-dataset-upload-max-mb` (500 MB by default).",
+        "parameters": [
+          { "$ref": "#/components/parameters/IfMatch" },
+          { "name": "name", "in": "query", "required": false, "description": "The file's name on the uploader's computer: .csv, .txt or .tsv", "schema": { "type": "string" } }
+        ],
+        "requestBody": { "required": true, "content": { "*/*": { "schema": { "type": "string", "format": "binary" } } } },
+        "responses": {
+          "200": { "description": "Stored", "headers": { "ETag": { "$ref": "#/components/headers/ETag" } }, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DatasetDefinition" } } } },
+          "400": { "$ref": "#/components/responses/InvalidRequest" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "412": { "$ref": "#/components/responses/StaleVersion" },
+          "413": { "description": "`too-large`: the file is larger than the server accepts", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "415": { "description": "`unsupported-file`: not a .csv, .txt or .tsv file, empty, or not text", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "428": { "$ref": "#/components/responses/VersionRequired" },
+          "500": { "$ref": "#/components/responses/Internal" },
+          "501": { "$ref": "#/components/responses/NotImplemented" }
+        }
+      }
+    },
     "/data-access/api/v2/datasets/{id}/stage": {
       "parameters": [{ "$ref": "#/components/parameters/Id" }],
       "post": {
         "tags": ["Datasets"],
         "operationId": "stageDataset",
         "summary": "Load the dataset's uploaded file into a staging table",
-        "description": "For a FILE source only. Reads the whole file and checks every value against the type detected from its first lines; a column with a value that doesn't fit is loaded as text and reported in `warnings`. Then creates a new table on the staging connection (`data-access-staging-jndi`), loads every row in one transaction, and points the dataset at it (`source.connection`, `source.file.stagingTable`). The table the dataset used before is dropped. If the load fails, the dataset is unchanged.",
+        "description": "For a FILE source only. Reads the whole file and checks every value against the type detected from its first lines; a column with a value that doesn't fit is loaded as text and reported in `warnings`. Then creates a new table on the staging connection (`data-access-staging-jndi`), loads every row in one transaction, and points the dataset at it. Columns the definition lists are loaded as the type it gives them (values that don't fit load as empty and are counted in `warnings`); other columns use the detected type (`source.connection`, `source.file.stagingTable`). The table the dataset used before is dropped. If the load fails, the dataset is unchanged.",
         "parameters": [{ "$ref": "#/components/parameters/IfMatch" }],
         "responses": {
           "200": { "description": "Loaded", "headers": { "ETag": { "$ref": "#/components/headers/ETag" } }, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/StagedTable" } } } },
@@ -419,7 +445,7 @@
         "properties": {
           "code": {
             "type": "string",
-            "enum": ["invalid-definition", "invalid-request", "validation-failed", "source-failed", "forbidden", "not-found", "already-exists", "stale-version", "version-required", "not-implemented", "internal"]
+            "enum": ["invalid-definition", "invalid-request", "validation-failed", "source-failed", "forbidden", "not-found", "already-exists", "stale-version", "version-required", "too-large", "unsupported-file", "not-implemented", "internal"]
           },
           "message": { "type": "string" },
           "path": { "type": "string" },
