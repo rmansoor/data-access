@@ -90,14 +90,31 @@ public class CsvSourceAdapter implements SourceAdapter {
     final String enclosure;
     final int header;
     final int detectLines;
+    /** A workbook: read through {@link XlsxRows} instead of as text. */
+    final boolean workbook;
+    /** The workbook's sheet to read; null for the first. */
+    final String sheet;
+    /** The workbook row the table starts at, from 1. */
+    final int startRow;
+    /** A Parquet file: read through {@link ParquetRows}, its column types from its schema. */
+    final List<ColumnType> parquetTypes;
 
     CsvFile( Path path, String encoding, String delimiter, String enclosure, int header, int detectLines ) {
+      this( path, encoding, delimiter, enclosure, header, detectLines, false, null, 1, null );
+    }
+
+    CsvFile( Path path, String encoding, String delimiter, String enclosure, int header, int detectLines, boolean workbook,
+             String sheet, int startRow, List<ColumnType> parquetTypes ) {
       this.path = path;
       this.encoding = encoding;
       this.delimiter = delimiter;
       this.enclosure = enclosure;
       this.header = header;
       this.detectLines = detectLines;
+      this.workbook = workbook;
+      this.sheet = sheet;
+      this.startRow = startRow;
+      this.parquetTypes = parquetTypes;
     }
   }
 
@@ -122,7 +139,9 @@ public class CsvSourceAdapter implements SourceAdapter {
     CsvFile f = open( source );
     try {
       List<List<String>> lines = lines( f, Math.max( f.detectLines, f.header + limit + 1 ) );
-      return profile( lines, f, limit );
+      Sample sample = profile( lines, f, limit );
+      return f.workbook ? new Sample( sample.getColumns(), sample.getRows(), sample.isTruncated(), XlsxRows.sheets( f.path ) )
+        : sample;
     } catch ( IOException | KettleException e ) {
       throw JdbcSourceSupport.failed( "The file could not be read: " + e.getMessage(), e );
     }
@@ -134,14 +153,34 @@ public class CsvSourceAdapter implements SourceAdapter {
     if ( f == null ) {
       throw JdbcSourceSupport.invalid( FILE, "is required" );
     }
-    if ( f.getFormat() != null && f.getFormat() != FileFormat.CSV ) {
-      throw JdbcSourceSupport.invalid( FILE + ".format", "is not supported yet (" + f.getFormat() + ")" );
-    }
     if ( f.getPath() == null || f.getPath().trim().isEmpty() ) {
       throw JdbcSourceSupport.invalid( FILE + ".path", "is required" );
     }
     Path path = files.locate( f.getPath() ).orElseThrow(
       () -> JdbcSourceSupport.invalid( FILE + ".path", "names no uploaded file (\"" + f.getPath() + "\")" ) );
+    if ( f.getFormat() == FileFormat.XLSX ) {
+      int header = f.isHeaderRow() ? 1 : 0;
+      String sheet = blank( f.getSheet() ) ? null : f.getSheet();
+      try {
+        if ( sheet != null && !XlsxRows.sheets( path ).contains( sheet ) ) {
+          throw JdbcSourceSupport.invalid( FILE + ".sheet", "names no sheet of the workbook (\"" + sheet + "\")" );
+        }
+      } catch ( IOException e ) {
+        throw JdbcSourceSupport.failed( "The file could not be read: " + e.getMessage(), e );
+      }
+      return new CsvFile( path, null, null, null, header, Math.max( limits.getTypeDetectionRows(), header + 1 ), true, sheet,
+        Math.max( 1, f.getStartRow() ), null );
+    }
+    if ( f.getFormat() == FileFormat.PARQUET ) {
+      try {
+        List<ColumnType> types = new ArrayList<>();
+        ParquetRows.schema( path ).forEach( c -> types.add( c.getType() ) );
+        // The column names always come first: the file names its columns.
+        return new CsvFile( path, null, null, null, 1, limits.getTypeDetectionRows() + 1, false, null, 1, types );
+      } catch ( IOException e ) {
+        throw JdbcSourceSupport.failed( "The file could not be read: " + e.getMessage(), e );
+      }
+    }
     try {
       String encoding = blank( f.getEncoding() ) ? detectEncoding( path ) : f.getEncoding();
       if ( !Charset.isSupported( encoding ) ) {
@@ -176,6 +215,9 @@ public class CsvSourceAdapter implements SourceAdapter {
 
   /** Column names and types from the file's first lines (the header, if any, and the detection window). */
   static Detected detect( List<List<String>> lines, CsvFile f ) {
+    if ( f.parquetTypes != null ) {
+      return fromSchema( lines.isEmpty() ? List.of() : lines.get( 0 ), f.parquetTypes );
+    }
     int width = lines.stream().limit( f.detectLines ).mapToInt( List::size ).max().orElse( 0 );
     List<String> headings = f.header > 0 && !lines.isEmpty() ? lines.get( 0 ) : List.of();
     List<List<String>> data = lines.subList( Math.min( f.header, lines.size() ), lines.size() );
@@ -196,6 +238,48 @@ public class CsvSourceAdapter implements SourceAdapter {
       columns.add( new SourceColumn( name, columnType( meta ), meta.getConversionMask(), null, null ) );
     }
     return new Detected( columns, metas );
+  }
+
+  /**
+   * A Parquet file's columns: its names and its schema's types. Each type's parser is the one detection
+   * gives for that type's plain text form (as {@link ParquetRows} writes values), so values parse the same.
+   */
+  private static Detected fromSchema( List<String> names, List<ColumnType> types ) {
+    List<SourceColumn> columns = new ArrayList<>();
+    List<ValueMetaInterface> metas = new ArrayList<>();
+    for ( int c = 0; c < types.size(); c++ ) {
+      ColumnType type = types.get( c );
+      ValueMetaInterface meta = plainMeta( type );
+      metas.add( meta );
+      String name = c < names.size() && !blank( names.get( c ) ) ? names.get( c ) : CsvFileInfo.DEFAULT_COLUMN_NAME_PREFIX + ( c + 1 );
+      columns.add( new SourceColumn( name, type, meta.getConversionMask(), null, null ) );
+    }
+    return new Detected( columns, metas );
+  }
+
+  private static ValueMetaInterface plainMeta( ColumnType type ) {
+    String sample;
+    switch ( type ) {
+      case INTEGER:
+        sample = "12";
+        break;
+      case DECIMAL:
+        sample = "1234.5";
+        break;
+      case DATE:
+        sample = "2026-01-02";
+        break;
+      case TIMESTAMP:
+        sample = "2026-01-02 09:30:00";
+        break;
+      case BOOLEAN:
+        return new org.pentaho.di.core.row.value.ValueMetaBoolean( "value" );
+      default:
+        return new ValueMetaString( "value" );
+    }
+    StringEvaluator eval = new StringEvaluator( false, CsvUtils.NUMBER_FORMATS, ColumnInfo.DATE_FORMATS );
+    eval.evaluateString( sample );
+    return eval.getAdvicedResult().getConversionMeta();
   }
 
   static ColumnType columnType( ValueMetaInterface meta ) {
@@ -266,6 +350,14 @@ public class CsvSourceAdapter implements SourceAdapter {
 
   /** Reads the file line by line, header included, without holding it in memory. */
   static void eachLine( CsvFile f, LineHandler handler ) throws IOException, KettleException {
+    if ( f.workbook ) {
+      XlsxRows.each( f.path, f.sheet, f.startRow, handler );
+      return;
+    }
+    if ( f.parquetTypes != null ) {
+      ParquetRows.each( f.path, handler );
+      return;
+    }
     int fileType = new CsvInspector().determineFileFormat( firstLine( f.path, f.encoding ) );
     try ( InputStream in = BOMInputStream.builder().setInputStream( Files.newInputStream( f.path ) ).get();
           BufferedInputStreamReader reader = new BufferedInputStreamReader( new InputStreamReader( in, f.encoding ) ) ) {

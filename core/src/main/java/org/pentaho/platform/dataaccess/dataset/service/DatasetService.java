@@ -322,6 +322,14 @@ public class DatasetService {
     String previous = file.getPath();
     file.setPath( stored );
     file.setOriginalName( displayName( originalName ) );
+    // The format follows the file: a workbook's sheet and start row stay while it is a workbook (a newer copy).
+    DatasetDefinition.FileFormat format = stored.endsWith( ".xlsx" ) ? DatasetDefinition.FileFormat.XLSX
+      : stored.endsWith( ".parquet" ) ? DatasetDefinition.FileFormat.PARQUET : DatasetDefinition.FileFormat.CSV;
+    if ( file.getFormat() != format ) {
+      file.setSheet( null );
+      file.setStartRow( 0 );
+    }
+    file.setFormat( format );
     StoredDataset updated;
     try {
       updated = store.update( d, expectedVersion );

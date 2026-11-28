@@ -43,13 +43,15 @@
       "additionalProperties": false,
       "required": ["format", "path"],
       "properties": {
-        "format": { "enum": ["CSV"] },
+        "format": { "enum": ["CSV", "XLSX", "PARQUET"] },
         "path": { "type": "string", "minLength": 1 },
         "originalName": { "type": "string" },
         "encoding": { "type": "string" },
         "delimiter": { "type": "string", "minLength": 1, "maxLength": 1 },
         "enclosure": { "type": "string", "maxLength": 1 },
         "headerRow": { "type": "boolean" },
+        "sheet": { "type": "string", "description": "XLSX: the sheet to read; the first when not set" },
+        "startRow": { "type": "integer", "minimum": 1, "description": "XLSX: the row the table starts at, from 1" },
         "stagingTable": { "type": "string" },
         "stagedColumns": {
           "type": "array",
