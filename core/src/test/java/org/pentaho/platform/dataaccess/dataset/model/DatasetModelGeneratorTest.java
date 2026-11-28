@@ -40,6 +40,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -241,14 +242,18 @@ public class DatasetModelGeneratorTest {
   }
 
   @Test
-  public void joiningTablesIsNotSupportedYet() {
-    DatasetDefinition d = sales();
-    Source s = new Source();
-    s.setType( SourceType.TABLES );
-    s.setConnection( "SampleData" );
-    s.setTables( new ArrayList<>( List.of( "ORDERS", "CUSTOMERS" ) ) );
-    d.setSource( s );
-    expectProblem( "source.tables", () -> PhysicalSource.of( d, "SampleData", dataSource( "SampleData" ) ) );
+  public void severalTablesNeedRelationships() {
+    DatasetDefinition d = star();
+    d.getRelationships().clear();
+    expectProblem( "relationships", () -> PhysicalSource.of( d, "SampleData", dataSource( "SampleData" ) ) );
+  }
+
+  @Test
+  public void tablesMustFormAStar() {
+    DatasetDefinition d = star();
+    // Products joined to customers, not to the fact table: a snowflake.
+    d.getRelationships().get( 1 ).setFromTable( "PUBLIC.CUSTOMER_W_TER" );
+    expectProblem( "relationships[1]", () -> PhysicalSource.of( d, "SampleData", dataSource( "SampleData" ) ) );
   }
 
   @Test
@@ -260,9 +265,122 @@ public class DatasetModelGeneratorTest {
     s.setTables( new ArrayList<>( List.of( "PUBLIC.ORDERFACT" ) ) );
     d.setSource( s );
     PhysicalSource p = PhysicalSource.of( d, "SampleData", dataSource( "SampleData" ) );
-    assertEquals( "PUBLIC", p.getSchema() );
-    assertEquals( "ORDERFACT", p.getTable() );
+    assertEquals( 1, p.getTables().size() );
+    assertEquals( "PUBLIC", p.getTables().get( 0 ).getSchema() );
+    assertEquals( "ORDERFACT", p.getTables().get( 0 ).getName() );
     assertEquals( "region", p.getColumns().get( "region" ) );
+  }
+
+  @Test
+  public void aStarHasTheFactTableFirstAndKeepsJoinKeysOutOfSight() {
+    PhysicalSource p = PhysicalSource.of( star(), "SampleData", dataSource( "SampleData" ) );
+    assertEquals( "ORDERFACT", p.getTables().get( 0 ).getName() );
+    assertTrue( p.getTables().get( 0 ).isFact() );
+    assertEquals( Set.of( "CUSTOMERNUMBER", "PRODUCTCODE" ), p.getTables().get( 0 ).getKeys() );
+    assertEquals( Set.of( "CUSTOMERNUMBER" ), p.getTables().get( 1 ).getKeys() );
+    assertTrue( p.getJoins().get( 1 ).isOuter() );
+  }
+
+  @Test
+  public void aStarOfTables() throws Exception {
+    DatasetDefinition d = star();
+    DatasetModelGenerator.Generated g = generator.generate( d, PhysicalSource.of( d, "SampleData", dataSource( "SampleData" ) ),
+      PublishedIds.of( d ) );
+    golden( "star-orders.mondrian.xml", g.getMondrianSchema() );
+    golden( "star-orders.xmi", g.getXmi() );
+    // Dimensions on other tables join the fact table by its key.
+    assertTrue( g.getMondrianSchema(), g.getMondrianSchema().contains( "foreignKey=\"CUSTOMERNUMBER\"" ) );
+    assertTrue( g.getMondrianSchema(), g.getMondrianSchema().contains( "foreignKey=\"PRODUCTCODE\"" ) );
+
+    Domain domain = new XmiParser().parseXmi( stream( g.getXmi() ) );
+    LogicalModel reporting = domain.findLogicalModel( PublishedIds.MODEL_ID );
+    assertEquals( 2, reporting.getLogicalRelationships().size() );
+    List<String> offered = new ArrayList<>();
+    reporting.getCategories().forEach( c -> c.getLogicalColumns().forEach( lc -> offered.add( lc.getPhysicalColumn().getId() ) ) );
+    assertEquals( List.of( "QUANTITYORDERED", "TOTALPRICE", "STATUS", "CUSTOMERNAME", "COUNTRY", "PRODUCTLINE" ), sorted( offered,
+      List.of( "QUANTITYORDERED", "TOTALPRICE", "STATUS", "CUSTOMERNAME", "COUNTRY", "PRODUCTLINE" ) ) );
+  }
+
+  @Test
+  public void aStarWithoutAModelGetsMeasuresFromTheFactTable() {
+    DatasetDefinition d = star();
+    d.setModel( null );
+    Model m = generator.suggest( d, PhysicalSource.of( d, "SampleData", dataSource( "SampleData" ) ) );
+    List<String> measures = new ArrayList<>();
+    m.getMeasures().forEach( x -> measures.add( x.getColumn() ) );
+    List<String> levels = new ArrayList<>();
+    m.getDimensions().forEach( x -> levels.addAll( x.getLevels() ) );
+    assertEquals( List.of( "price", "quantity" ), measures ); // the modeler sorts fields by name
+    assertTrue( levels.toString(), levels.containsAll( List.of( "customer", "country", "productLine" ) ) );
+    assertTrue( "no join keys", !levels.contains( null ) );
+    DatasetModelGenerator.Generated g = generator.generate( d, PhysicalSource.of( d, "SampleData", dataSource( "SampleData" ) ),
+      PublishedIds.of( d ) );
+    assertTrue( g.getMondrianSchema(), !g.getMondrianSchema().contains( "name=\"CUSTOMERNUMBER\"" ) );
+  }
+
+  /** Every expected name is offered, nothing else (order aside). */
+  private static List<String> sorted( List<String> actual, List<String> expected ) {
+    List<String> a = new ArrayList<>( actual );
+    a.sort( java.util.Comparator.comparingInt( x -> expected.indexOf( x ) < 0 ? Integer.MAX_VALUE : expected.indexOf( x ) ) );
+    return a;
+  }
+
+  /** Orders (fact) joined to customers (left outer… inner) and products: Steel Wheels' shape. */
+  static DatasetDefinition star() {
+    DatasetDefinition d = new DatasetDefinition();
+    d.setId( "orders-star" );
+    d.setName( "Orders star" );
+    Source s = new Source();
+    s.setType( SourceType.TABLES );
+    s.setConnection( "SampleData" );
+    s.setTables( new ArrayList<>( List.of( "PUBLIC.ORDERFACT", "PUBLIC.CUSTOMER_W_TER", "PUBLIC.PRODUCTS" ) ) );
+    d.setSource( s );
+    d.setColumns( new ArrayList<>( List.of(
+      tableColumn( "quantity", "PUBLIC.ORDERFACT", "QUANTITYORDERED", ColumnType.INTEGER ),
+      tableColumn( "price", "PUBLIC.ORDERFACT", "TOTALPRICE", ColumnType.DECIMAL ),
+      tableColumn( "status", "PUBLIC.ORDERFACT", "STATUS", ColumnType.STRING ),
+      tableColumn( "customer", "PUBLIC.CUSTOMER_W_TER", "CUSTOMERNAME", ColumnType.STRING ),
+      tableColumn( "country", "PUBLIC.CUSTOMER_W_TER", "COUNTRY", ColumnType.STRING ),
+      tableColumn( "productLine", "PUBLIC.PRODUCTS", "PRODUCTLINE", ColumnType.STRING ) ) ) );
+    d.getRelationships().add( relationship( "PUBLIC.ORDERFACT", "CUSTOMERNUMBER", "PUBLIC.CUSTOMER_W_TER", "CUSTOMERNUMBER",
+      DatasetDefinition.JoinType.INNER, DatasetDefinition.Cardinality.MANY_TO_ONE ) );
+    // Written from the dimension's side; read from the many side.
+    d.getRelationships().add( relationship( "PUBLIC.PRODUCTS", "PRODUCTCODE", "PUBLIC.ORDERFACT", "PRODUCTCODE",
+      DatasetDefinition.JoinType.LEFT_OUTER, DatasetDefinition.Cardinality.ONE_TO_MANY ) );
+    Model m = new Model();
+    Dimension customer = new Dimension();
+    customer.setName( "Customer" );
+    customer.getLevels().addAll( List.of( "country", "customer" ) );
+    Dimension line = new Dimension();
+    line.setName( "Product line" );
+    line.getLevels().add( "productLine" );
+    Dimension status = new Dimension();
+    status.setName( "Status" );
+    status.getLevels().add( "status" );
+    m.getDimensions().addAll( List.of( customer, line, status ) );
+    m.getMeasures().add( measure( "Quantity", "quantity", Aggregation.SUM, null ) );
+    m.getMeasures().add( measure( "Sales", "price", Aggregation.SUM, "#,##0.00" ) );
+    d.setModel( m );
+    return d;
+  }
+
+  private static Column tableColumn( String name, String table, String sourceName, ColumnType type ) {
+    Column c = column( name, type );
+    c.setTable( table );
+    c.setSourceName( sourceName );
+    return c;
+  }
+
+  private static DatasetDefinition.Relationship relationship( String fromTable, String fromColumn, String toTable, String toColumn,
+                                                              DatasetDefinition.JoinType join, DatasetDefinition.Cardinality cardinality ) {
+    DatasetDefinition.Relationship r = new DatasetDefinition.Relationship();
+    r.setFromTable( fromTable );
+    r.setFromColumn( fromColumn );
+    r.setToTable( toTable );
+    r.setToColumn( toColumn );
+    r.setJoinType( join );
+    r.setCardinality( cardinality );
+    return r;
   }
 
   // ------------------------------------------------------------------------------------------------

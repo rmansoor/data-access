@@ -1,0 +1,31 @@
+<Schema name="Orders star">
+  <Dimension name="Customer">
+    <Hierarchy hasAll="true" primaryKey="CUSTOMERNUMBER">
+      <Table name="CUSTOMER_W_TER" schema="PUBLIC"/>
+      <Level name="country" uniqueMembers="false" column="COUNTRY" type="String">
+      </Level>
+      <Level name="customer" uniqueMembers="false" column="CUSTOMERNAME" type="String">
+      </Level>
+    </Hierarchy>
+  </Dimension>
+  <Dimension name="Product line">
+    <Hierarchy hasAll="true" primaryKey="PRODUCTCODE">
+      <Table name="PRODUCTS" schema="PUBLIC"/>
+      <Level name="productLine" uniqueMembers="false" column="PRODUCTLINE" type="String">
+      </Level>
+    </Hierarchy>
+  </Dimension>
+  <Cube name="Orders star">
+    <Table name="ORDERFACT" schema="PUBLIC"/>
+    <DimensionUsage name="Customer" source="Customer" foreignKey="CUSTOMERNUMBER"/>
+    <DimensionUsage name="Product line" source="Product line" foreignKey="PRODUCTCODE"/>
+    <Dimension name="Status">
+      <Hierarchy hasAll="true">
+        <Level name="status" uniqueMembers="false" column="STATUS" type="String">
+        </Level>
+      </Hierarchy>
+    </Dimension>
+    <Measure name="Quantity" column="QUANTITYORDERED" aggregator="sum"/>
+    <Measure name="Sales" column="TOTALPRICE" aggregator="sum" formatString="#,##0.00"/>
+  </Cube>
+</Schema>

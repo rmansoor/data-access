@@ -26,11 +26,15 @@ import org.pentaho.agilebi.modeler.nodes.MainModelNode;
 import org.pentaho.agilebi.modeler.nodes.MeasureMetaData;
 import org.pentaho.agilebi.modeler.nodes.RelationalModelNode;
 import org.pentaho.agilebi.modeler.nodes.TimeRole;
+import org.pentaho.agilebi.modeler.strategy.StarSchemaAutoModelStrategy;
 import org.pentaho.di.core.Props;
+import org.pentaho.metadata.automodel.PhysicalTableImporter;
+import org.pentaho.metadata.model.Category;
 import org.pentaho.metadata.model.Domain;
 import org.pentaho.metadata.model.IPhysicalColumn;
 import org.pentaho.metadata.model.LogicalColumn;
 import org.pentaho.metadata.model.LogicalModel;
+import org.pentaho.metadata.model.LogicalRelationship;
 import org.pentaho.metadata.model.LogicalTable;
 import org.pentaho.metadata.model.SqlPhysicalColumn;
 import org.pentaho.metadata.model.SqlPhysicalModel;
@@ -40,6 +44,7 @@ import org.pentaho.metadata.model.concept.types.DataType;
 import org.pentaho.metadata.model.concept.types.FieldType;
 import org.pentaho.metadata.model.concept.types.LocaleType;
 import org.pentaho.metadata.model.concept.types.LocalizedString;
+import org.pentaho.metadata.model.concept.types.RelationshipType;
 import org.pentaho.metadata.model.concept.types.TargetTableType;
 import org.pentaho.metadata.util.MondrianModelExporter;
 import org.pentaho.metadata.util.Util;
@@ -130,6 +135,7 @@ public class DatasetModelGenerator {
     try {
       if ( empty ) {
         helper( ws ).autoModelFlat( ws );
+        dropKeys( ws, source );
       } else {
         apply( ws, d, source, model, warnings );
       }
@@ -155,6 +161,9 @@ public class DatasetModelGenerator {
       m.setProperty( "AGILE_BI_GENERATED_SCHEMA", "TRUE" );
       m.setProperty( "WIZARD_GENERATED_SCHEMA", "TRUE" );
     }
+    if ( reporting != null ) {
+      dropKeys( reporting, source );
+    }
     if ( reporting != null && d.getDescription() != null && !d.getDescription().trim().isEmpty() ) {
       reporting.setDescription( new LocalizedString( LOCALE, d.getDescription().trim() ) );
     }
@@ -163,6 +172,9 @@ public class DatasetModelGenerator {
       analysis.setProperty( "MondrianCatalogRef", ids.getCatalogName() );
       try {
         mondrian = new MondrianModelExporter( analysis, LOCALE ).createMondrianModelXML();
+        if ( !source.getJoins().isEmpty() ) {
+          mondrian = degenerateFactDimensions( mondrian );
+        }
       } catch ( Exception e ) {
         throw new DatasetApiException( Code.INTERNAL, "", "The Mondrian schema could not be generated: " + e.getMessage(), null, e );
       }
@@ -177,11 +189,17 @@ public class DatasetModelGenerator {
     ModelerWorkspace ws = workspace( d, source, PublishedIds.of( d ) );
     try {
       helper( ws ).autoModelFlat( ws );
+      dropKeys( ws, source );
     } catch ( ModelerException e ) {
       throw new DatasetApiException( Code.INTERNAL, "", "No model could be suggested: " + e.getMessage(), null, e );
     }
+    // A field back to its definition column: by its table and column.
+    List<String> tableIds = tableIds( source );
     Map<String, String> byPhysical = new HashMap<>();
-    source.getColumns().forEach( ( name, physical ) -> byPhysical.put( physical, name ) );
+    for ( int i = 0; i < source.getTables().size(); i++ ) {
+      String tableId = tableIds.get( i );
+      source.getTables().get( i ).getColumns().forEach( ( name, column ) -> byPhysical.put( tableId + "\u0000" + column, name ) );
+    }
     Model model = new Model();
     for ( DimensionMetaData dm : ws.getModel().getDimensions() ) {
       Dimension dim = new Dimension();
@@ -189,7 +207,7 @@ public class DatasetModelGenerator {
       dim.setTime( dm.isTimeDimension() );
       for ( HierarchyMetaData h : dm ) {
         for ( LevelMetaData level : h ) {
-          dim.getLevels().add( byPhysical.get( targetColumn( level.getLogicalColumn() ) ) );
+          dim.getLevels().add( byPhysical.get( fieldKey( level.getLogicalColumn() ) ) );
         }
       }
       model.getDimensions().add( dim );
@@ -197,7 +215,7 @@ public class DatasetModelGenerator {
     for ( MeasureMetaData mm : ws.getModel().getMeasures() ) {
       Measure m = new Measure();
       m.setName( mm.getName() );
-      m.setColumn( byPhysical.get( targetColumn( mm.getLogicalColumn() ) ) );
+      m.setColumn( byPhysical.get( fieldKey( mm.getLogicalColumn() ) ) );
       m.setAggregation( aggregation( mm.getDefaultAggregation() ) );
       model.getMeasures().add( m );
     }
@@ -205,7 +223,7 @@ public class DatasetModelGenerator {
   }
 
   // ------------------------------------------------------------------------------------------------
-  // The domain the modeler starts from: one physical table and its logical table.
+  // The domain the modeler starts from: the physical tables, their logical tables, and the joins.
 
   private ModelerWorkspace workspace( DatasetDefinition d, PhysicalSource source, PublishedIds ids ) {
     if ( !Props.isInitialized() ) {
@@ -219,64 +237,157 @@ public class DatasetModelGenerator {
     physical.setId( source.getConnection() );
     physical.setDatasource( source.getDataSource() );
     domain.addPhysicalModel( physical );
-
-    SqlPhysicalTable table = new SqlPhysicalTable( physical );
-    if ( source.getSql() != null ) {
-      table.setId( INLINE_SQL_TABLE_ID );
-      table.setTargetTableType( TargetTableType.INLINE_SQL );
-      table.setTargetTable( source.getSql() );
-    } else {
-      table.setId( PHYSICAL_TABLE_ID );
-      if ( source.getSchema() != null ) {
-        table.setTargetSchema( source.getSchema() );
-      }
-      table.setTargetTable( source.getTable() );
-    }
-    table.setName( new LocalizedString( LOCALE, ids.getCatalogName() ) );
-    Map<String, Column> byName = new HashMap<>();
-    for ( Column c : PhysicalSource.kept( d ) ) {
-      byName.put( c.getName(), c );
-    }
-    for ( Map.Entry<String, String> e : source.getColumns().entrySet() ) {
-      Column c = byName.get( e.getKey() );
-      SqlPhysicalColumn pc = new SqlPhysicalColumn( table );
-      pc.setId( e.getValue() );
-      pc.setTargetColumn( e.getValue() );
-      pc.setFieldType( FieldType.guessFieldType( e.getValue() ) );
-      pc.setAggregationType( AggregationType.NONE );
-      pc.setName( new LocalizedString( LOCALE, label( c ) ) );
-      pc.setDataType( dataType( c.getType() ) );
-      if ( c.getDescription() != null && !c.getDescription().trim().isEmpty() ) {
-        pc.setDescription( new LocalizedString( LOCALE, c.getDescription().trim() ) );
-      }
-      if ( c.getFormat() != null && !c.getFormat().trim().isEmpty() ) {
-        pc.setProperty( "mask", c.getFormat().trim() );
-      }
-      table.getPhysicalColumns().add( pc );
-    }
-    physical.addPhysicalTable( table );
-
     LogicalModel logical = new LogicalModel();
     logical.setId( ids.getModelId() );
     logical.setPhysicalModel( physical );
     domain.addLogicalModel( logical );
-    LogicalTable lt = new LogicalTable( logical, table );
-    lt.setName( new LocalizedString( LOCALE, ids.getCatalogName() ) );
-    lt.setId( Util.proposeSqlBasedLogicalTableId( LOCALE, lt, table ) );
-    for ( IPhysicalColumn pc : table.getPhysicalColumns() ) {
-      LogicalColumn lc = new LogicalColumn();
-      lc.setPhysicalColumn( pc );
-      lc.setLogicalTable( lt );
-      lc.setId( Util.proposeSqlBasedLogicalColumnId( LOCALE, lt, (SqlPhysicalColumn) pc ) );
-      lt.addLogicalColumn( lc );
-    }
-    logical.addLogicalTable( lt );
 
-    ModelerWorkspace ws = new ModelerWorkspace( new Helper() );
+    Map<String, Column> byName = new HashMap<>();
+    for ( Column c : PhysicalSource.kept( d ) ) {
+      byName.put( c.getName(), c );
+    }
+    boolean single = source.getTables().size() == 1;
+    List<String> tableIds = tableIds( source );
+    Map<PhysicalSource.Table, LogicalTable> logicalTables = new HashMap<>();
+    SqlPhysicalTable factTable = null;
+    for ( int i = 0; i < source.getTables().size(); i++ ) {
+      PhysicalSource.Table t = source.getTables().get( i );
+      SqlPhysicalTable table = new SqlPhysicalTable( physical );
+      table.setId( tableIds.get( i ) );
+      if ( t.getSql() != null ) {
+        table.setTargetTableType( TargetTableType.INLINE_SQL );
+        table.setTargetTable( t.getSql() );
+      } else {
+        if ( t.getSchema() != null ) {
+          table.setTargetSchema( t.getSchema() );
+        }
+        table.setTargetTable( t.getName() );
+      }
+      String tableLabel = single ? ids.getCatalogName() : PhysicalTableImporter.beautifyName( t.getName() );
+      table.setName( new LocalizedString( LOCALE, tableLabel ) );
+      for ( Map.Entry<String, String> e : t.getColumns().entrySet() ) {
+        Column c = byName.get( e.getKey() );
+        SqlPhysicalColumn pc = column( table, e.getValue(), label( c ), dataType( c.getType() ) );
+        if ( c.getDescription() != null && !c.getDescription().trim().isEmpty() ) {
+          pc.setDescription( new LocalizedString( LOCALE, c.getDescription().trim() ) );
+        }
+        if ( c.getFormat() != null && !c.getFormat().trim().isEmpty() ) {
+          pc.setProperty( "mask", c.getFormat().trim() );
+        }
+      }
+      for ( String key : t.getKeys() ) {
+        column( table, key, key, DataType.UNKNOWN );
+      }
+      physical.addPhysicalTable( table );
+      if ( t.isFact() ) {
+        table.setProperty( "FACT_TABLE", Boolean.TRUE ); // where the modeler puts the cube
+        factTable = table;
+      }
+
+      LogicalTable lt = new LogicalTable( logical, table );
+      lt.setName( new LocalizedString( LOCALE, tableLabel ) );
+      lt.setId( Util.proposeSqlBasedLogicalTableId( LOCALE, lt, table ) );
+      for ( IPhysicalColumn pc : table.getPhysicalColumns() ) {
+        LogicalColumn lc = new LogicalColumn();
+        lc.setPhysicalColumn( pc );
+        lc.setLogicalTable( lt );
+        lc.setId( Util.proposeSqlBasedLogicalColumnId( LOCALE, lt, (SqlPhysicalColumn) pc ) );
+        lt.addLogicalColumn( lc );
+      }
+      logical.addLogicalTable( lt );
+      logicalTables.put( t, lt );
+    }
+    for ( PhysicalSource.Join j : source.getJoins() ) {
+      LogicalTable from = logicalTables.get( j.getFrom() );
+      LogicalTable to = logicalTables.get( j.getTo() );
+      LogicalRelationship r = new LogicalRelationship( logical, from, to, logicalColumn( from, j.getFromColumn() ),
+        logicalColumn( to, j.getToColumn() ) );
+      r.setRelationshipType( j.isOuter() ? RelationshipType._0_1 : RelationshipType._N_1 );
+      logical.addLogicalRelationship( r );
+    }
+
+    Helper helper = new Helper();
+    ModelerWorkspace ws = new ModelerWorkspace( helper );
     ws.setDomain( domain );
     ws.setModelName( ids.getCatalogName() );
     ws.setRelationalModelName( ids.getCatalogName() );
+    if ( factTable != null ) {
+      ws.getAvailableTables().setFactTable( factTable );
+      // After setDomain, which picks the multi-table strategy (no analysis model): a star's suggestion is the wizard's.
+      helper.setAutoModelStrategy( new StarSchemaAutoModelStrategy( LOCALE ) );
+    }
     return ws;
+  }
+
+  /** The physical tables' ids: as the wizard named a single table or query; PT_<table> with several. */
+  static List<String> tableIds( PhysicalSource source ) {
+    List<String> ids = new ArrayList<>();
+    for ( PhysicalSource.Table t : source.getTables() ) {
+      String id = t.getSql() != null ? INLINE_SQL_TABLE_ID
+        : source.getTables().size() == 1 ? PHYSICAL_TABLE_ID : Util.getPhysicalTableIdPrefix() + Util.toId( t.getName() );
+      String unique = id;
+      for ( int n = 2; ids.contains( unique ); n++ ) {
+        unique = id + "_" + n;
+      }
+      ids.add( unique );
+    }
+    return ids;
+  }
+
+  private static SqlPhysicalColumn column( SqlPhysicalTable table, String name, String label, DataType type ) {
+    SqlPhysicalColumn pc = new SqlPhysicalColumn( table );
+    pc.setId( name );
+    pc.setTargetColumn( name );
+    pc.setFieldType( FieldType.guessFieldType( name ) );
+    pc.setAggregationType( AggregationType.NONE );
+    pc.setName( new LocalizedString( LOCALE, label ) );
+    pc.setDataType( type );
+    table.getPhysicalColumns().add( pc );
+    return pc;
+  }
+
+  private static LogicalColumn logicalColumn( LogicalTable t, String physical ) {
+    for ( LogicalColumn c : t.getLogicalColumns() ) {
+      if ( c.getPhysicalColumn().getId().equals( physical ) ) {
+        return c;
+      }
+    }
+    throw new IllegalStateException( "No column " + physical + " in " + t.getId() );
+  }
+
+  /** Whether a modeler field reads a column only joins use. */
+  private static boolean isKey( PhysicalSource source, List<String> tableIds, LogicalColumn c ) {
+    if ( c == null ) {
+      return false;
+    }
+    IPhysicalColumn pc = c.getPhysicalColumn();
+    for ( int i = 0; i < source.getTables().size(); i++ ) {
+      if ( tableIds.get( i ).equals( pc.getPhysicalTable().getId() ) && source.getTables().get( i ).getKeys().contains( pc.getId() ) ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** Takes join-only columns out of what the modeler suggested: they are there for the joins, not for people. */
+  private static void dropKeys( ModelerWorkspace ws, PhysicalSource source ) {
+    List<String> ids = tableIds( source );
+    ws.getModel().getMeasures().removeIf( m -> isKey( source, ids, m.getLogicalColumn() ) );
+    ws.getModel().getDimensions().removeIf( dm -> {
+      for ( HierarchyMetaData h : dm ) {
+        h.removeIf( level -> isKey( source, ids, level.getLogicalColumn() ) );
+      }
+      dm.removeIf( h -> h.isEmpty() );
+      return dm.isEmpty();
+    } );
+  }
+
+  /** Takes join-only columns out of the reporting model's categories (what Interactive Reports lists). */
+  private static void dropKeys( LogicalModel reporting, PhysicalSource source ) {
+    List<String> ids = tableIds( source );
+    for ( Category c : reporting.getCategories() ) {
+      c.getLogicalColumns().removeIf( lc -> isKey( source, ids, lc ) );
+    }
   }
 
   // ------------------------------------------------------------------------------------------------
@@ -284,12 +395,19 @@ public class DatasetModelGenerator {
 
   private static void apply( ModelerWorkspace ws, DatasetDefinition d, PhysicalSource source, Model model,
                              List<String> warnings ) {
-    AvailableTable table = ws.getAvailableTables().getAsAvailableTablesList().get( 0 );
     Map<String, AvailableField> fields = new HashMap<>();
-    for ( AvailableField f : table.getAvailableFields() ) {
-      fields.put( f.getPhysicalColumn().getId(), f );
+    for ( AvailableTable table : ws.getAvailableTables().getAsAvailableTablesList() ) {
+      for ( AvailableField f : table.getAvailableFields() ) {
+        fields.put( f.getPhysicalColumn().getPhysicalTable().getId() + "\u0000" + f.getPhysicalColumn().getId(), f );
+      }
     }
-    Map<String, String> physical = source.getColumns();
+    // A definition column's field: its table's id, then its column in that table.
+    List<String> tableIds = tableIds( source );
+    Map<String, String> physical = new HashMap<>();
+    for ( int i = 0; i < source.getTables().size(); i++ ) {
+      String tableId = tableIds.get( i );
+      source.getTables().get( i ).getColumns().forEach( ( name, column ) -> physical.put( name, tableId + "\u0000" + column ) );
+    }
     List<DatasetProblem> problems = new ArrayList<>();
     MainModelNode main = ws.getModel();
     for ( int i = 0; i < model.getDimensions().size(); i++ ) {
@@ -418,8 +536,9 @@ public class DatasetModelGenerator {
     return !ws.getModel().getMeasures().isEmpty();
   }
 
-  private static String targetColumn( LogicalColumn c ) {
-    return c == null ? null : ( (SqlPhysicalColumn) c.getPhysicalColumn() ).getTargetColumn();
+  /** A field's table id and column, as {@link #suggest} keys definition columns. */
+  private static String fieldKey( LogicalColumn c ) {
+    return c == null ? null : c.getPhysicalColumn().getPhysicalTable().getId() + "\u0000" + c.getPhysicalColumn().getId();
   }
 
   // ------------------------------------------------------------------------------------------------
@@ -484,6 +603,47 @@ public class DatasetModelGenerator {
       default:
         return Aggregation.SUM;
     }
+  }
+
+  /**
+   * With several tables the exporter writes a dimension on the fact table's own columns as a shared
+   * dimension over the fact table, joined back to it by the first relationship's key: Mondrian would
+   * join each fact row to every row sharing that key and inflate every total. Such a dimension is
+   * moved into the cube as a degenerate dimension (no table, no join), which reads the fact row itself.
+   */
+  static String degenerateFactDimensions( String schema ) {
+    java.util.regex.Matcher cube = java.util.regex.Pattern.compile( "  <Cube [^\n]*\n    (<Table [^\n]*/>)\n" ).matcher( schema );
+    if ( !cube.find() ) {
+      return schema;
+    }
+    String factTable = cube.group( 1 );
+    java.util.regex.Matcher dim = java.util.regex.Pattern.compile(
+      "  <Dimension name=\"([^\"]*)\"([^>]*)>\n((?:    [^\n]*\n)*?)  </Dimension>\n" ).matcher( schema );
+    StringBuilder shared = new StringBuilder();
+    Map<String, String> degenerate = new HashMap<>();
+    int last = 0;
+    while ( dim.find() ) {
+      String body = dim.group( 3 );
+      if ( body.contains( "\n      " + factTable + "\n" ) ) {
+        String inline = "    <Dimension name=\"" + dim.group( 1 ) + "\"" + dim.group( 2 ) + ">\n"
+          + body.replace( "      " + factTable + "\n", "" ).replaceAll( " primaryKey=\"[^\"]*\"", "" ).replaceAll( "(?m)^", "  " )
+          .replaceAll( "  $", "" )
+          + "    </Dimension>\n";
+        degenerate.put( dim.group( 1 ), inline );
+        shared.append( schema, last, dim.start() );
+        last = dim.end();
+      }
+    }
+    if ( degenerate.isEmpty() ) {
+      return schema;
+    }
+    shared.append( schema.substring( last ) );
+    String out = shared.toString();
+    for ( Map.Entry<String, String> e : degenerate.entrySet() ) {
+      String usage = "    <DimensionUsage name=\"" + e.getKey() + "\" source=\"" + e.getKey() + "\"[^\n]*/>\n";
+      out = out.replaceFirst( usage.replace( "(", "\\(" ).replace( ")", "\\)" ), java.util.regex.Matcher.quoteReplacement( e.getValue() ) );
+    }
+    return out;
   }
 
   /**
