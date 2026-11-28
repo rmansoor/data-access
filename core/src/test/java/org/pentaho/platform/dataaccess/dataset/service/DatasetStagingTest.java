@@ -50,6 +50,7 @@ import java.util.stream.Stream;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -358,6 +359,9 @@ public class DatasetStagingTest {
     assertEquals( "Staging", state.getConnection() );
     assertEquals( "Staging", state.getDefaults().getConnection() );
     assertEquals( null, state.getSaved().getConnection() );
+    // Unset values are left out of the JSON, not sent as null: clients read them as optional strings.
+    String json = org.pentaho.platform.dataaccess.dataset.DatasetJson.mapper().writeValueAsString( state );
+    assertFalse( json, json.contains( "null" ) );
 
     expect( Code.FORBIDDEN, () -> service.setStaging( new StagingSettings( "Other", null ) ) );
     admin = true;

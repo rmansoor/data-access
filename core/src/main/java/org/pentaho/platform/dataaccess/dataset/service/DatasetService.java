@@ -263,6 +263,7 @@ public class DatasetService {
   }
 
   /** Where uploaded files are loaded: in effect, as saved by an administrator, and the settings.xml defaults. */
+  @com.fasterxml.jackson.annotation.JsonInclude( com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL )
   public static final class StagingState {
     private final String connection;
     private final String schema;
