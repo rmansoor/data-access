@@ -45,6 +45,12 @@
   <bean class="org.pentaho.platform.dataaccess.dataset.api.DatasetsResource">
     <constructor-arg ref="datasetServiceFactory"/>
   </bean>
+  <bean class="org.pentaho.platform.dataaccess.dataset.api.ConnectionsResource">
+    <constructor-arg ref="datasetServiceFactory"/>
+  </bean>
+  <bean class="org.pentaho.platform.dataaccess.dataset.api.DatasetSettingsResource">
+    <constructor-arg ref="datasetServiceFactory"/>
+  </bean>
   <bean class="org.pentaho.platform.dataaccess.dataset.api.DatasetsApiDocResource"/>
   <bean class="org.pentaho.platform.dataaccess.datasource.wizard.service.impl.DatabaseDialectService"/>
   <bean class="org.pentaho.platform.dataaccess.datasource.wizard.service.impl.DataAccessPermissionResource" />
@@ -349,6 +355,11 @@
 
 
         <!-- REST /plugin/data-access/api/* -->
+
+        <!-- POST, PUT, DELETE /plugin/data-access/api/v2/* (datasets, connections) -->
+        <swm:regex-request-matcher pattern="^/plugin/data-access/api/v2/.*" methods="POST" />
+        <swm:regex-request-matcher pattern="^/plugin/data-access/api/v2/.*" methods="PUT" />
+        <swm:regex-request-matcher pattern="^/plugin/data-access/api/v2/.*" methods="DELETE" />
 
         <!-- POST /plugin/data-access/api/datasource/analysis/{id}/remove -->
         <swm:regex-request-matcher pattern="^/plugin/data-access/api/datasource/analysis/[^/]*/remove\b.*" methods="POST" />

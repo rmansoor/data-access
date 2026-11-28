@@ -25,6 +25,7 @@ import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.EntityTag;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
@@ -44,6 +45,7 @@ import org.pentaho.platform.dataaccess.dataset.service.StoredDataset;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.io.InputStream;
 import java.util.List;
 import java.util.function.Supplier;
 
@@ -65,7 +67,8 @@ public class DatasetsResource {
 
   private final Supplier<DatasetService> service;
   private final DatasetJson json = new DatasetJson();
-  private final ObjectMapper mapper = DatasetJson.mapper();
+  static final ObjectMapper MAPPER = DatasetJson.mapper();
+  private final ObjectMapper mapper = MAPPER;
 
   /** @param service built per request, so it sees the caller's session (see the Spring wiring) */
   public DatasetsResource( Supplier<DatasetService> service ) {
@@ -177,14 +180,74 @@ public class DatasetsResource {
     } );
   }
 
-  /** Sample rows come from the source adapters (CWBA-62). */
+  /**
+   * The source's first rows: {@code {"columns": [{name, type, sourceType, nullable, table}], "rows": [[…]],
+   * "truncated": bool}}. {@code limit} is 1 to 1000 (100 by default); {@code table} picks a table of a
+   * TABLES source.
+   */
   @POST
   @Path( "{id}/sample" )
-  public Response sample( @PathParam( "id" ) String id ) {
+  public Response sample( @PathParam( "id" ) String id, @QueryParam( "limit" ) Integer limit, @QueryParam( "table" ) String table ) {
+    return handle( () -> Response.ok( mapper.writeValueAsString( service.get().sample( id, limit, table ) ) ).build() );
+  }
+
+  /**
+   * Uploads the dataset's CSV file: the request body is the file itself (any content type), and
+   * {@code name} its file name on the uploader's computer. Requires If-Match with the version last
+   * read; answers the definition, now naming the stored file, with its new ETag. 413 when the file
+   * is too large, 415 when it isn't a text file.
+   */
+  @PUT
+  @Path( "{id}/file" )
+  @Consumes( MediaType.WILDCARD )
+  public Response uploadFile( @PathParam( "id" ) String id, @HeaderParam( HttpHeaders.IF_MATCH ) String ifMatch,
+                              @QueryParam( "name" ) String name, InputStream body ) {
     return handle( () -> {
-      service.get().get( id );
-      throw new DatasetApiException( Code.NOT_IMPLEMENTED, "Sampling arrives with the source adapters (CWBA-62)" );
+      DatasetService s = service.get();
+      return definition( Response.ok(), s.uploadFile( id, expected( s, id, ifMatch ), name, body ) );
     } );
+  }
+
+  /**
+   * Loads a FILE source's uploaded file into a new table on the staging connection and points the
+   * dataset at it. Requires If-Match with the version last read; the response's ETag is the new
+   * version. Body: {@code {"connection", "table", "rows", "columns": [{sourceName, name, type, sqlType}],
+   * "warnings": […]}}.
+   */
+  @POST
+  @Path( "{id}/stage" )
+  public Response stage( @PathParam( "id" ) String id, @HeaderParam( HttpHeaders.IF_MATCH ) String ifMatch,
+                         @QueryParam( "async" ) boolean async ) {
+    return handle( () -> {
+      DatasetService s = service.get();
+      if ( async ) {
+        // 202 with the job; follow it at GET .../stage, stop it with DELETE .../stage.
+        return Response.accepted( mapper.writeValueAsString( s.startLoad( id, expected( s, id, ifMatch ) ) ) )
+          .type( MediaType.APPLICATION_JSON ).build();
+      }
+      DatasetService.Staging staged = s.stage( id, expected( s, id, ifMatch ) );
+      return Response.ok( mapper.writeValueAsString( staged.getTable() ) ).tag( etag( staged.getDataset() ) )
+        .type( MediaType.APPLICATION_JSON ).build();
+    } );
+  }
+
+  /**
+   * The dataset's running or last background load: {@code {"id", "state": RUNNING|SUCCEEDED|FAILED|CANCELLED,
+   * "rowsRead", "rowsLoaded", "started", "finished", "table", "version", "error"}}. 404 when there
+   * has been none since the server started.
+   */
+  @GET
+  @Path( "{id}/stage" )
+  public Response loadStatus( @PathParam( "id" ) String id ) {
+    return handle( () -> Response.ok( mapper.writeValueAsString( service.get().loadStatus( id ) ) ).build() );
+  }
+
+  /** Asks the running background load to stop; it stops within the next thousand rows and leaves nothing behind. */
+  @DELETE
+  @Path( "{id}/stage" )
+  public Response cancelLoad( @PathParam( "id" ) String id ) {
+    return handle( () -> Response.accepted( mapper.writeValueAsString( service.get().cancelLoad( id ) ) )
+      .type( MediaType.APPLICATION_JSON ).build() );
   }
 
   /** Publishing generates the metadata and Mondrian files (CWBA-63). */
@@ -255,6 +318,11 @@ public class DatasetsResource {
   }
 
   private Response handle( Action action ) {
+    return respond( action );
+  }
+
+  /** Runs a request, answering API errors with their code and problems, anything else as INTERNAL. */
+  static Response respond( Action action ) {
     try {
       return action.run();
     } catch ( DatasetApiException e ) {
@@ -265,8 +333,8 @@ public class DatasetsResource {
     }
   }
 
-  private Response error( Code code, String message, String path, List<DatasetProblem> problems ) {
-    ObjectNode body = mapper.createObjectNode();
+  private static Response error( Code code, String message, String path, List<DatasetProblem> problems ) {
+    ObjectNode body = MAPPER.createObjectNode();
     body.put( "code", code.wire() );
     body.put( "message", message );
     putIfPresent( body, "path", path );
@@ -275,7 +343,7 @@ public class DatasetsResource {
     }
     String text;
     try {
-      text = mapper.writeValueAsString( body );
+      text = MAPPER.writeValueAsString( body );
     } catch ( Exception e ) {
       text = "{\"code\":\"internal\"}";
     }
@@ -296,7 +364,7 @@ public class DatasetsResource {
   }
 
   @FunctionalInterface
-  private interface Action {
+  interface Action {
     Response run() throws Exception;
   }
 }

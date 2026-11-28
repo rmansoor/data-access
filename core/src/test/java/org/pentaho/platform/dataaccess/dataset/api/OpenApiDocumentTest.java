@@ -49,7 +49,7 @@ public class OpenApiDocumentTest {
   @Test
   public void describesExactlyTheEndpointsTheCodeServes() {
     Set<String> inCode = new TreeSet<>();
-    for ( Class<?> resource : List.of( DatasetsResource.class, DatasetsApiDocResource.class ) ) {
+    for ( Class<?> resource : List.of( DatasetsResource.class, ConnectionsResource.class, DatasetSettingsResource.class, DatasetsApiDocResource.class ) ) {
       String base = resource.getAnnotation( Path.class ).value();
       for ( Method m : resource.getDeclaredMethods() ) {
         String verb = m.isAnnotationPresent( GET.class ) ? "get" : m.isAnnotationPresent( POST.class ) ? "post"

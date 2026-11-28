@@ -45,6 +45,7 @@
       "properties": {
         "format": { "enum": ["CSV"] },
         "path": { "type": "string", "minLength": 1 },
+        "originalName": { "type": "string" },
         "encoding": { "type": "string" },
         "delimiter": { "type": "string", "minLength": 1, "maxLength": 1 },
         "enclosure": { "type": "string", "maxLength": 1 },

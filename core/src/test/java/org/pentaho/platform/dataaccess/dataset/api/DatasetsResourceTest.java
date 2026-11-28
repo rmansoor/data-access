@@ -205,10 +205,18 @@ public class DatasetsResourceTest {
   @Test
   public void saysWhatIsNotBuiltYet() throws Exception {
     resource.create( CSV );
-    Response sample = resource.sample( "monthly-orders" );
-    assertEquals( 501, sample.getStatus() );
-    assertTrue( body( sample ).get( "message" ).asText().contains( "CWBA-62" ) );
-    assertEquals( 501, resource.publish( "monthly-orders" ).getStatus() );
+    // No source adapters are configured in this test.
+    assertEquals( 501, resource.sample( "monthly-orders", null, null ).getStatus() );
+    assertEquals( "loading needs the version", 428, resource.stage( "monthly-orders", null, false ).getStatus() );
+    assertEquals( 501, resource.stage( "monthly-orders", "*", false ).getStatus() );
+    assertEquals( 501, resource.stage( "monthly-orders", "*", true ).getStatus() );
+    assertEquals( 404, resource.loadStatus( "monthly-orders" ).getStatus() );
+    java.io.InputStream body = new java.io.ByteArrayInputStream( "a\n1\n".getBytes( java.nio.charset.StandardCharsets.UTF_8 ) );
+    assertEquals( "uploading needs the version", 428, resource.uploadFile( "monthly-orders", null, "a.csv", body ).getStatus() );
+    assertEquals( 501, resource.uploadFile( "monthly-orders", "*", "a.csv", body ).getStatus() );
+    Response publish = resource.publish( "monthly-orders" );
+    assertEquals( 501, publish.getStatus() );
+    assertTrue( body( publish ).get( "message" ).asText().contains( "CWBA-63" ) );
     assertEquals( 404, resource.publish( "missing" ).getStatus() );
   }
 }

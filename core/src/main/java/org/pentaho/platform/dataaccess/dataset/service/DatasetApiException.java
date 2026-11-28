@@ -33,6 +33,8 @@ public class DatasetApiException extends RuntimeException {
     INVALID_REQUEST( 400 ),
     /** The definition is readable but incomplete or inconsistent (422). */
     VALIDATION_FAILED( 422 ),
+    /** The dataset's source refused or failed: a SQL error, a timeout, an unreadable file (422). */
+    SOURCE_FAILED( 422 ),
     /** The caller may not do this (403). */
     FORBIDDEN( 403 ),
     NOT_FOUND( 404 ),
@@ -42,6 +44,10 @@ public class DatasetApiException extends RuntimeException {
     STALE_VERSION( 412 ),
     /** Updates and deletes must say which version they expect, with If-Match (428). */
     VERSION_REQUIRED( 428 ),
+    /** An uploaded file is larger than the server accepts (413). */
+    TOO_LARGE( 413 ),
+    /** An uploaded file isn't a kind the server reads, such as a binary file sent as CSV (415). */
+    UNSUPPORTED_FILE( 415 ),
     /** Planned but not built yet (501). */
     NOT_IMPLEMENTED( 501 ),
     /** Anything else; details are logged, not returned (500). */

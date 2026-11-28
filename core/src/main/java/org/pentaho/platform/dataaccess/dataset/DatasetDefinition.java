@@ -206,11 +206,13 @@ public class DatasetDefinition {
 
   /** A file the dataset was loaded from, and how to read it. */
   @JsonInclude( JsonInclude.Include.NON_DEFAULT )
-  @JsonPropertyOrder( { "format", "path", "encoding", "delimiter", "enclosure", "headerRow", "stagingTable" } )
+  @JsonPropertyOrder( { "format", "path", "originalName", "encoding", "delimiter", "enclosure", "headerRow", "stagingTable" } )
   public static class FileSource {
     private FileFormat format;
     /** Repository or staging path of the uploaded file. */
     private String path;
+    /** The file's name on the uploader's computer, for display; set by the server on upload. */
+    private String originalName;
     private String encoding;
     private String delimiter;
     private String enclosure;
@@ -232,6 +234,14 @@ public class DatasetDefinition {
 
     public void setPath( String path ) {
       this.path = path;
+    }
+
+    public String getOriginalName() {
+      return originalName;
+    }
+
+    public void setOriginalName( String originalName ) {
+      this.originalName = originalName;
     }
 
     public String getEncoding() {

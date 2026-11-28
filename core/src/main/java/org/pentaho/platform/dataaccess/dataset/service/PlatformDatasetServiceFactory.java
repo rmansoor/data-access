@@ -13,6 +13,7 @@
 package org.pentaho.platform.dataaccess.dataset.service;
 
 import org.pentaho.platform.api.engine.IPentahoSession;
+import org.pentaho.platform.dataaccess.dataset.source.SourceAdapters;
 import org.pentaho.platform.engine.core.system.PentahoSessionHolder;
 
 import java.util.function.Supplier;
@@ -27,20 +28,23 @@ public class PlatformDatasetServiceFactory implements Supplier<DatasetService> {
   private final DatasetStore store;
   private final DatasetPermissions permissions;
   private final DatasetSharing sharing;
+  private final SourceAdapters sources;
 
   public PlatformDatasetServiceFactory() {
-    this( new RepositoryDatasetStore(), new PlatformDatasetPermissions(), new RepositoryDatasetSharing() );
+    this( new RepositoryDatasetStore(), new PlatformDatasetPermissions(), new RepositoryDatasetSharing(), SourceAdapters.platform() );
   }
 
-  public PlatformDatasetServiceFactory( DatasetStore store, DatasetPermissions permissions, DatasetSharing sharing ) {
+  public PlatformDatasetServiceFactory( DatasetStore store, DatasetPermissions permissions, DatasetSharing sharing,
+                                        SourceAdapters sources ) {
     this.store = store;
     this.permissions = permissions;
     this.sharing = sharing;
+    this.sources = sources;
   }
 
   @Override
   public DatasetService get() {
-    return new DatasetService( store, permissions, PlatformDatasetServiceFactory::currentUser, sharing );
+    return new DatasetService( store, permissions, PlatformDatasetServiceFactory::currentUser, sharing, sources );
   }
 
   private static String currentUser() {
