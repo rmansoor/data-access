@@ -77,6 +77,7 @@ public final class DatasetValidator {
     Set<String> tables = source( d.getSource(), run );
     Map<String, Column> columns = columns( d, tables, run );
     model( d.getModel(), columns, run );
+    excludedColumns( d, tables, columns, run );
     relationships( d, tables, run );
     security( d, columns, run );
     refresh( d.getRefresh(), run );
@@ -343,6 +344,31 @@ public final class DatasetValidator {
         ZoneId.of( r.getTimeZone() );
       } catch ( DateTimeException e ) {
         run.add( "refresh.timeZone", "\"" + r.getTimeZone() + "\" is not a known time zone" );
+      }
+    }
+  }
+
+  /** Each left-out column names a source column (of one of the source's tables) that isn't also kept. */
+  private static void excludedColumns( DatasetDefinition d, Set<String> tables, Map<String, Column> columns, Run run ) {
+    if ( d.getExcludedColumns() == null ) {
+      return;
+    }
+    Set<String> kept = new HashSet<>();
+    for ( Column c : columns.values() ) {
+      kept.add( ( c.getTable() == null ? "" : c.getTable() ) + '\u0000' + ( blank( c.getSourceName() ) ? c.getName() : c.getSourceName() ) );
+    }
+    for ( int i = 0; i < d.getExcludedColumns().size(); i++ ) {
+      DatasetDefinition.ColumnRef ref = d.getExcludedColumns().get( i );
+      String at = "excludedColumns[" + i + "]";
+      if ( ref == null || blank( ref.getSourceName() ) ) {
+        run.add( at + ".sourceName", "is required" );
+        continue;
+      }
+      if ( ref.getTable() != null && !tables.contains( ref.getTable() ) ) {
+        run.add( at + ".table", "\"" + ref.getTable() + "\" is not one of the source's tables" );
+      }
+      if ( kept.contains( ( ref.getTable() == null ? "" : ref.getTable() ) + '\u0000' + ref.getSourceName() ) ) {
+        run.add( at, "\"" + ref.getSourceName() + "\" is kept as a column, so it can't also be left out" );
       }
     }
   }

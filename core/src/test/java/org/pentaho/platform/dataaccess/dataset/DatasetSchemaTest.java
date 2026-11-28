@@ -64,6 +64,7 @@ public class DatasetSchemaTest {
     defs.put( "source", DatasetDefinition.Source.class );
     defs.put( "file", DatasetDefinition.FileSource.class );
     defs.put( "column", DatasetDefinition.Column.class );
+    defs.put( "columnRef", DatasetDefinition.ColumnRef.class );
     defs.put( "model", DatasetDefinition.Model.class );
     defs.put( "dimension", DatasetDefinition.Dimension.class );
     defs.put( "measure", DatasetDefinition.Measure.class );
