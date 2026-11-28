@@ -70,6 +70,8 @@ public final class SourceAdapters {
     adapters.staging = staging;
     adapters.connections = connections;
     adapters.publisher = new org.pentaho.platform.dataaccess.dataset.model.PlatformModelPublisher( connections );
+    adapters.history = new org.pentaho.platform.dataaccess.dataset.service.RefreshHistory.InRepository();
+    adapters.schedules = new org.pentaho.platform.dataaccess.dataset.service.DatasetSchedules.InScheduler();
     return adapters;
   }
 
@@ -140,6 +142,33 @@ public final class SourceAdapters {
   }
 
   private org.pentaho.platform.dataaccess.dataset.model.ModelPublisher publisher;
+  private org.pentaho.platform.dataaccess.dataset.service.RefreshHistory history =
+    new org.pentaho.platform.dataaccess.dataset.service.RefreshHistory.InMemory();
+
+  /** Where each dataset's loads are recorded; in memory unless set (the platform keeps them in the repository). */
+  public org.pentaho.platform.dataaccess.dataset.service.RefreshHistory history() {
+    return history;
+  }
+
+  private org.pentaho.platform.dataaccess.dataset.service.DatasetSchedules schedules =
+    new org.pentaho.platform.dataaccess.dataset.service.DatasetSchedules.InMemory();
+
+  /** Where scheduled reloads are kept; in memory unless set (the platform uses its scheduler). */
+  public org.pentaho.platform.dataaccess.dataset.service.DatasetSchedules schedules() {
+    return schedules;
+  }
+
+  /** Sets where scheduled reloads are kept; for tests. */
+  public SourceAdapters withSchedules( org.pentaho.platform.dataaccess.dataset.service.DatasetSchedules schedules ) {
+    this.schedules = schedules;
+    return this;
+  }
+
+  /** Sets where loads are recorded; for tests. */
+  public SourceAdapters withHistory( org.pentaho.platform.dataaccess.dataset.service.RefreshHistory history ) {
+    this.history = history;
+    return this;
+  }
 
   /** Sets where published datasets go; for tests. */
   public SourceAdapters withPublisher( org.pentaho.platform.dataaccess.dataset.model.ModelPublisher publisher ) {

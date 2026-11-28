@@ -143,20 +143,162 @@ public class CsvStager {
 
   /** As {@link #stage(String, Source, List)}, reporting to {@code progress} and stopping when it asks. */
   public StagedTable stage( String datasetId, Source source, List<Column> columns, Progress progress ) {
-    CsvSourceAdapter.CsvFile file = csv.open( source );
-    Profile profile = profile( file, columns == null ? List.of() : columns, progress );
+    return stage( datasetId, List.of( source ), columns, progress );
+  }
+
+  /**
+   * Loads several files with the same columns (a dataset's file and the files appended to it) into one
+   * new table, in order. Columns are matched by name, so a later file may order them differently;
+   * each file is read with the formats detected for it, and the table's columns are sized for all.
+   * A column the dataset doesn't type takes the widest type the files agree on (whole numbers and
+   * decimals: decimal; dates and timestamps: timestamp; otherwise text).
+   */
+  public StagedTable stage( String datasetId, List<Source> sources, List<Column> columns, Progress progress ) {
+    if ( sources.isEmpty() ) {
+      throw JdbcSourceSupport.invalid( CsvSourceAdapter.FILE + ".path", "is required" );
+    }
+    List<Column> chosen = columns == null ? List.of() : columns;
+    List<Part> parts = new ArrayList<>();
+    long[] readBefore = { 0 };
+    for ( int k = 0; k < sources.size(); k++ ) {
+      CsvSourceAdapter.CsvFile file = csv.open( sources.get( k ) );
+      Progress offset = offset( progress, readBefore[ 0 ] );
+      Profile p = profile( file, chosen, offset );
+      readBefore[ 0 ] += p.rows;
+      parts.add( new Part( file, p, label( sources.get( k ), k, sources.size() ) ) );
+    }
+    Profile base = parts.get( 0 ).profile;
+    base.progress = progress;
+    for ( int k = 1; k < parts.size(); k++ ) {
+      merge( base, parts.get( k ) );
+    }
+    for ( Part part : parts ) {
+      part.useTypes( base );
+    }
+    if ( readBefore[ 0 ] > maxRows ) {
+      throw JdbcSourceSupport.failed( "The files have more than " + maxRows + " rows together, the most this server loads", null );
+    }
     String connection = connection();
     try ( Connection c = open( connection ) ) {
       boolean autoCommit = c.getAutoCommit();
       c.setAutoCommit( false );
       try {
-        return load( c, connection, datasetId, file, profile );
+        return load( c, connection, datasetId, parts, base );
       } finally {
         restore( c, autoCommit );
       }
     } catch ( SQLException e ) {
       throw JdbcSourceSupport.failed( "The staging database refused the load: " + e.getMessage(), e );
     }
+  }
+
+  /** One file of a load: how it reads, what its first pass found, and where each table column is in it. */
+  private static final class Part {
+    final CsvSourceAdapter.CsvFile file;
+    final Profile profile;
+    final String label;
+    /** For each table column (the first file's), its position in this file; -1 when the file lacks it. */
+    int[] positions;
+
+    Part( CsvSourceAdapter.CsvFile file, Profile profile, String label ) {
+      this.file = file;
+      this.profile = profile;
+      this.label = label;
+      this.positions = new int[ profile.width() ];
+      for ( int i = 0; i < positions.length; i++ ) {
+        positions[ i ] = i;
+      }
+    }
+
+    /** Takes the table's final types for the columns it has. */
+    void useTypes( Profile base ) {
+      for ( int i = 0; i < positions.length; i++ ) {
+        if ( positions[ i ] >= 0 && profile != base ) {
+          profile.types[ positions[ i ] ] = base.types[ i ];
+        }
+      }
+    }
+  }
+
+  private static String label( Source s, int k, int count ) {
+    if ( count == 1 ) {
+      return null;
+    }
+    String name = s.getFile() == null ? null : s.getFile().getOriginalName();
+    return name != null ? "\"" + name + "\"" : "file " + ( k + 1 );
+  }
+
+  /** Folds a later file's first pass into the first file's: sizes, types, values that didn't fit, warnings. */
+  private static void merge( Profile base, Part part ) {
+    Profile p = part.profile;
+    part.positions = new int[ base.width() ];
+    for ( int i = 0; i < base.width(); i++ ) {
+      String name = base.detected.columns.get( i ).getName();
+      int j = -1;
+      for ( int c = 0; c < p.width(); c++ ) {
+        if ( name != null && name.equals( p.detected.columns.get( c ).getName() ) ) {
+          j = c;
+          break;
+        }
+      }
+      part.positions[ i ] = j;
+      if ( j < 0 ) {
+        base.warn( "In " + part.label + ", column \"" + name + "\" is missing; its rows were loaded with it empty" );
+        continue;
+      }
+      base.maxLength[ i ] = Math.max( base.maxLength[ i ], p.maxLength[ j ] );
+      base.integerDigits[ i ] = Math.max( base.integerDigits[ i ], p.integerDigits[ j ] );
+      base.scale[ i ] = Math.max( base.scale[ i ], p.scale[ j ] );
+      if ( p.misfits[ j ] > 0 && base.misfits[ i ] == 0 ) {
+        base.firstMisfit[ i ] = part.label + ", " + p.firstMisfit[ j ];
+      }
+      base.misfits[ i ] += p.misfits[ j ];
+      if ( !base.chosen[ i ] ) {
+        base.types[ i ] = widest( base.types[ i ], p.types[ j ] );
+      }
+    }
+    base.rows += p.rows;
+    base.wideLines += p.wideLines;
+    for ( String w : p.warnings ) {
+      base.warn( "In " + part.label + ": " + w );
+    }
+  }
+
+  static ColumnType widest( ColumnType a, ColumnType b ) {
+    if ( a == b ) {
+      return a;
+    }
+    java.util.Set<ColumnType> both = java.util.EnumSet.of( a, b );
+    if ( both.equals( java.util.EnumSet.of( ColumnType.INTEGER, ColumnType.DECIMAL ) ) ) {
+      return ColumnType.DECIMAL;
+    }
+    if ( both.equals( java.util.EnumSet.of( ColumnType.DATE, ColumnType.TIMESTAMP ) ) ) {
+      return ColumnType.TIMESTAMP;
+    }
+    return ColumnType.STRING;
+  }
+
+  /** Reports a later file's progress after the rows of the files before it. */
+  private static Progress offset( Progress progress, long before ) {
+    if ( before == 0 ) {
+      return progress;
+    }
+    return new Progress() {
+      @Override
+      public void read( long rows ) {
+        progress.read( before + rows );
+      }
+
+      @Override
+      public void loaded( long rows ) {
+        progress.loaded( rows );
+      }
+
+      @Override
+      public boolean cancelled() {
+        return progress.cancelled();
+      }
+    };
   }
 
   /**
@@ -417,7 +559,7 @@ public class CsvStager {
   // ------------------------------------------------------------------------------------------------
   // Second pass: the table and its rows.
 
-  private StagedTable load( Connection c, String connection, String datasetId, CsvSourceAdapter.CsvFile file, Profile p )
+  private StagedTable load( Connection c, String connection, String datasetId, List<Part> parts, Profile p )
     throws SQLException {
     DatabaseMetaData md = c.getMetaData();
     String table = qualifiedName( tableName( md, datasetId ) );
@@ -439,9 +581,16 @@ public class CsvStager {
     // Some databases (Oracle, MySQL) commit DDL themselves; commit so the drop below is always possible.
     c.commit();
     try {
-      long rows = insert( c, insert.toString(), file, p );
+      long rows = 0;
+      for ( Part part : parts ) {
+        rows = insert( c, insert.toString(), part, p.types, p.progress, rows );
+      }
       c.commit();
-      return new StagedTable( connection, table, rows, columns, p.warnings );
+      long rejected = 0;
+      for ( long m : p.misfits ) {
+        rejected += m;
+      }
+      return new StagedTable( connection, table, rows, columns, p.warnings, rejected );
     } catch ( SQLException | RuntimeException e ) {
       rollbackAndDrop( c, quotedTable );
       throw e;
@@ -451,9 +600,13 @@ public class CsvStager {
     }
   }
 
-  private static long insert( Connection c, String sql, CsvSourceAdapter.CsvFile file, Profile p )
+  /** Inserts one file's rows, each table column read from where the file has it; returns the rows loaded so far. */
+  private static long insert( Connection c, String sql, Part part, ColumnType[] tableTypes, Progress progress, long before )
     throws SQLException, IOException, KettleException {
-    long[] rows = { 0 };
+    CsvSourceAdapter.CsvFile file = part.file;
+    Profile p = part.profile;
+    int[] at = part.positions;
+    long[] rows = { before };
     try ( PreparedStatement ps = c.prepareStatement( sql ) ) {
       SQLException[] failure = { null };
       CsvSourceAdapter.eachLine( file, ( values, n ) -> {
@@ -461,14 +614,19 @@ public class CsvStager {
           return true;
         }
         try {
-          for ( int i = 0; i < p.width(); i++ ) {
-            bind( ps, i + 1, i < values.size() ? values.get( i ) : null, p, i );
+          for ( int i = 0; i < at.length; i++ ) {
+            int j = at[ i ];
+            if ( j < 0 ) {
+              ps.setNull( i + 1, sqlType( tableTypes[ i ] ) );
+              continue;
+            }
+            bind( ps, i + 1, j < values.size() ? values.get( j ) : null, p, j );
           }
           ps.addBatch();
           if ( ++rows[ 0 ] % BATCH == 0 ) {
             ps.executeBatch();
-            p.progress.loaded( rows[ 0 ] );
-            if ( p.progress.cancelled() ) {
+            progress.loaded( rows[ 0 ] );
+            if ( progress.cancelled() ) {
               throw new Cancelled();
             }
           }

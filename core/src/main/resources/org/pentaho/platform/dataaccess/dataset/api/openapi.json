@@ -301,6 +301,80 @@
         }
       }
     },
+    "/data-access/api/v2/datasets/{id}/files": {
+      "parameters": [{ "$ref": "#/components/parameters/Id" }],
+      "post": {
+        "tags": ["Datasets"],
+        "operationId": "refreshDatasetWithFile",
+        "summary": "Refresh a file dataset with a new file: replace or append",
+        "description": "The request body is the file. `mode=replace` loads it instead of the dataset's files; `mode=append` loads it after them (the dataset keeps the list, so a reload reads them all). The file must have the columns the dataset was loaded with, by name, with values that fit their types: otherwise 422 with every difference, and nothing is stored. The load runs in the background (follow it at GET .../stage) and is strict: a value that doesn't fit its column fails it and the dataset keeps its data. A successful load swaps the new table in and republishes a published dataset under the same names. Every load is recorded at GET .../refreshes.",
+        "parameters": [
+          { "$ref": "#/components/parameters/IfMatch" },
+          { "name": "mode", "in": "query", "required": true, "schema": { "type": "string", "enum": ["replace", "append"] } },
+          { "name": "name", "in": "query", "required": false, "description": "The file's name on the uploader's computer", "schema": { "type": "string" } }
+        ],
+        "requestBody": { "required": true, "content": { "*/*": { "schema": { "type": "string", "format": "binary" } } } },
+        "responses": {
+          "202": { "description": "Started", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LoadJob" } } } },
+          "400": { "$ref": "#/components/responses/InvalidRequest" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/AlreadyExists" },
+          "412": { "$ref": "#/components/responses/StaleVersion" },
+          "422": { "$ref": "#/components/responses/ValidationFailed" },
+          "428": { "$ref": "#/components/responses/VersionRequired" }
+        }
+      }
+    },
+    "/data-access/api/v2/datasets/{id}/schedule": {
+      "parameters": [{ "$ref": "#/components/parameters/Id" }],
+      "get": {
+        "tags": ["Datasets"],
+        "operationId": "getDatasetSchedule",
+        "summary": "The file dataset's scheduled reload",
+        "responses": {
+          "200": { "description": "The schedule", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Schedule" } } } },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
+      "put": {
+        "tags": ["Datasets"],
+        "operationId": "setDatasetSchedule",
+        "summary": "Schedule the file dataset's reload, replacing its schedule",
+        "description": "A job in the platform scheduler, owned by the caller: it shows on the Schedules page, can be paused there, and blockouts apply. Each run loads the dataset's files again strictly (a value that doesn't fit fails the run and the dataset keeps its data), republishes a published dataset, and is recorded at GET .../refreshes. The dataset must have been loaded once.",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Schedule" } } } },
+        "responses": {
+          "200": { "description": "Scheduled", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Schedule" } } } },
+          "400": { "$ref": "#/components/responses/InvalidRequest" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "422": { "$ref": "#/components/responses/ValidationFailed" }
+        }
+      },
+      "delete": {
+        "tags": ["Datasets"],
+        "operationId": "removeDatasetSchedule",
+        "summary": "Stop the dataset's scheduled reloads",
+        "responses": {
+          "204": { "description": "Unscheduled (or it wasn't scheduled)" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/data-access/api/v2/datasets/{id}/refreshes": {
+      "parameters": [{ "$ref": "#/components/parameters/Id" }],
+      "get": {
+        "tags": ["Datasets"],
+        "operationId": "listDatasetRefreshes",
+        "summary": "The dataset's loads, newest first",
+        "description": "Up to the last 100 loads of a file dataset, whatever started them (the console, the API or a schedule): rows, start and finish, and the error or warnings.",
+        "responses": {
+          "200": { "description": "The loads", "content": { "application/json": { "schema": { "type": "object", "properties": { "refreshes": { "type": "array", "items": { "$ref": "#/components/schemas/Refresh" } } } } } } },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
     "/data-access/api/v2/connections/{name}/tables": {
       "parameters": [{ "name": "name", "in": "path", "required": true, "description": "A database connection's name", "schema": { "type": "string" } }],
       "get": {
@@ -408,6 +482,36 @@
     },
     "schemas": {
       "DatasetDefinition": { "$ref": "dataset-definition.schema.json" },
+      "Schedule": {
+        "type": "object",
+        "required": ["cron"],
+        "properties": {
+          "cron": { "type": "string", "description": "Quartz cron, seconds first; days of the week 1 = Sunday … 7 = Saturday. A six-field expression gets the year field (*). One the platform scheduler can't read is refused (400).", "example": "0 0 6 ? * 2-6" },
+          "timeZone": { "type": "string", "example": "Europe/Berlin" },
+          "jobId": { "type": "string", "readOnly": true },
+          "state": { "type": "string", "readOnly": true, "description": "NORMAL, PAUSED, BLOCKED, …" },
+          "owner": { "type": "string", "readOnly": true },
+          "nextRun": { "type": "string", "format": "date-time", "readOnly": true },
+          "lastRun": { "type": "string", "format": "date-time", "readOnly": true }
+        }
+      },
+      "Refresh": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "mode": { "type": "string", "enum": ["LOAD", "REPLACE", "APPEND"] },
+          "trigger": { "type": "string", "enum": ["USER", "SCHEDULE"] },
+          "user": { "type": "string" },
+          "file": { "type": "string", "description": "The new file's name (REPLACE, APPEND)" },
+          "started": { "type": "string", "format": "date-time" },
+          "finished": { "type": "string", "format": "date-time" },
+          "state": { "type": "string", "enum": ["SUCCEEDED", "FAILED"] },
+          "rows": { "type": "integer" },
+          "error": { "type": "string" },
+          "warnings": { "type": "array", "items": { "type": "string" } },
+          "republished": { "type": "boolean", "description": "Whether the published domain and catalog were brought up to date" }
+        }
+      },
       "Published": {
         "type": "object",
         "required": ["domainId", "modelId", "catalogName", "analysis", "warnings"],

@@ -172,6 +172,16 @@ public class DatasetService {
     if ( sources.hasFiles() ) {
       sources.files().deleteAll( id );
     }
+    try {
+      sources.schedules().remove( id );
+    } catch ( RuntimeException e ) {
+      LOG.warn( "Dataset " + id + " was deleted but its schedule could not be removed", e );
+    }
+    try {
+      sources.history().deleteAll( id );
+    } catch ( RuntimeException e ) {
+      LOG.warn( "Dataset " + id + " was deleted but its refresh history could not be", e );
+    }
     if ( PublishedIds.assigned( d ) && sources.canPublish() ) {
       try {
         sources.publisher().unpublish( PublishedIds.of( d ) );
@@ -485,18 +495,7 @@ public class DatasetService {
    * One load per dataset at a time (ALREADY_EXISTS otherwise).
    */
   public StagingJobs.Job startLoad( String id, String expectedVersion ) {
-    PreparedLoad load = prepareLoad( id, expectedVersion );
-    IPentahoSession session = PentahoSessionHolder.getSession();
-    return sources.jobs().start( id, progress -> {
-      // The worker acts for the caller who started it.
-      PentahoSessionHolder.setSession( session );
-      try {
-        Staging done = performLoad( load, progress );
-        return Map.entry( done.getTable(), done.getDataset().getVersion() );
-      } finally {
-        PentahoSessionHolder.removeSession();
-      }
-    } );
+    return runInBackground( prepareLoad( id, expectedVersion ) );
   }
 
   /** The dataset's running or last background load; NOT_FOUND when there has been none since the server started. */
@@ -521,7 +520,102 @@ public class DatasetService {
     return job;
   }
 
-  /** A load that passed its checks: what to load, and the table it replaces. */
+  /**
+   * Refreshes a file dataset with a new file, in the background: REPLACE loads it instead of the
+   * dataset's files, APPEND loads it after them. The new file must have the dataset's columns (by
+   * name, with types that fit), or it is refused with every difference. The load is strict: a value
+   * that doesn't fit its column fails it, and the dataset keeps its data. A successful load swaps the
+   * new table in and, for a published dataset, republishes it under the same names, so reports read
+   * the new rows. Follow it with {@link #loadStatus}; every refresh is recorded ({@link #refreshes}).
+   */
+  public StagingJobs.Job startRefresh( String id, String expectedVersion, DatasetRefresh.Mode mode, String originalName,
+                                       InputStream body ) {
+    if ( mode != DatasetRefresh.Mode.REPLACE && mode != DatasetRefresh.Mode.APPEND ) {
+      throw new DatasetApiException( Code.INVALID_REQUEST, "mode", "mode must be replace or append", null, null );
+    }
+    PreparedLoad base = prepareLoad( id, expectedVersion );
+    if ( mode == DatasetRefresh.Mode.APPEND && stagedTable( base.definition ) == null ) {
+      throw new DatasetApiException( Code.VALIDATION_FAILED, "mode", "The dataset hasn't been loaded yet: load it before appending to it",
+        null, null );
+    }
+    DatasetFiles files = sources.files();
+    String stored = files.store( id, originalName, body );
+    DatasetDefinition.AppendedFile file = new DatasetDefinition.AppendedFile( stored, displayName( originalName ) );
+    try {
+      requireSameColumns( base.definition, file );
+    } catch ( RuntimeException e ) {
+      files.delete( stored );
+      throw e;
+    }
+    PreparedLoad load = base.as( mode, DatasetRefresh.Trigger.USER, true, file );
+    return runInBackground( load );
+  }
+
+  /**
+   * Loads the dataset's files again, strictly, now (for a schedule): nothing changes when a value
+   * doesn't fit. As the caller, who must be able to change the dataset.
+   */
+  public DatasetRefresh reload( String id, DatasetRefresh.Trigger trigger ) {
+    StoredDataset current = writable( id );
+    PreparedLoad load = prepareLoad( id, current.getVersion() ).as( DatasetRefresh.Mode.LOAD, trigger, true, null );
+    performLoad( load, CsvStager.Progress.NONE );
+    List<DatasetRefresh> recorded = sources.history().list( id );
+    return recorded.isEmpty() ? null : recorded.get( 0 );
+  }
+
+  /** The dataset's scheduled reload, if it has one. */
+  public java.util.Optional<DatasetSchedule> schedule( String id ) {
+    requireView();
+    readable( id );
+    return sources.schedules().get( id );
+  }
+
+  /**
+   * Schedules the file dataset to be loaded again (strictly; see {@link #reload}), replacing any
+   * schedule it has. The caller owns the job and the reloads run as them.
+   */
+  public DatasetSchedule setSchedule( String id, DatasetSchedule schedule ) {
+    requireManage();
+    StoredDataset current = writable( id );
+    Source source = current.getDefinition().getSource();
+    if ( source == null || source.getType() != SourceType.FILE ) {
+      throw new DatasetApiException( Code.INVALID_REQUEST, "source.type", "Only file datasets are loaded on a schedule", null, null );
+    }
+    if ( stagedTable( current.getDefinition() ) == null ) {
+      throw new DatasetApiException( Code.VALIDATION_FAILED, "", "Load the dataset once before scheduling it", null, null );
+    }
+    return sources.schedules().set( id, "Refresh " + current.getDefinition().getName(), currentUser.get(), schedule );
+  }
+
+  /** Stops the dataset's scheduled reloads. */
+  public void removeSchedule( String id ) {
+    requireManage();
+    writable( id );
+    sources.schedules().remove( id );
+  }
+
+  /** The dataset's loads, newest first: what started each, rows, duration, and errors. */
+  public List<DatasetRefresh> refreshes( String id ) {
+    requireView();
+    readable( id );
+    return sources.history().list( id );
+  }
+
+  private StagingJobs.Job runInBackground( PreparedLoad load ) {
+    IPentahoSession session = PentahoSessionHolder.getSession();
+    return sources.jobs().start( load.id, progress -> {
+      // The worker acts for the caller who started it.
+      PentahoSessionHolder.setSession( session );
+      try {
+        Staging done = performLoad( load, progress );
+        return Map.entry( done.getTable(), done.getDataset().getVersion() );
+      } finally {
+        PentahoSessionHolder.removeSession();
+      }
+    } );
+  }
+
+  /** A load that passed its checks: what to load, how, and the table it replaces. */
   private static final class PreparedLoad {
     final String id;
     final String expectedVersion;
@@ -529,15 +623,30 @@ public class DatasetService {
     final CsvStager stager;
     final String previousConnection;
     final String previous;
+    final DatasetRefresh.Mode mode;
+    final DatasetRefresh.Trigger trigger;
+    /** A value that doesn't fit its column fails the load (refreshes), instead of loading as empty (the editor). */
+    final boolean strict;
+    /** REPLACE, APPEND: the new file, already stored. */
+    final DatasetDefinition.AppendedFile newFile;
 
     PreparedLoad( String id, String expectedVersion, DatasetDefinition definition, CsvStager stager, String previousConnection,
-                  String previous ) {
+                  String previous, DatasetRefresh.Mode mode, DatasetRefresh.Trigger trigger, boolean strict,
+                  DatasetDefinition.AppendedFile newFile ) {
       this.id = id;
       this.expectedVersion = expectedVersion;
       this.definition = definition;
       this.stager = stager;
       this.previousConnection = previousConnection;
       this.previous = previous;
+      this.mode = mode;
+      this.trigger = trigger;
+      this.strict = strict;
+      this.newFile = newFile;
+    }
+
+    PreparedLoad as( DatasetRefresh.Mode m, DatasetRefresh.Trigger t, boolean s, DatasetDefinition.AppendedFile f ) {
+      return new PreparedLoad( id, expectedVersion, definition, stager, previousConnection, previous, m, t, s, f );
     }
   }
 
@@ -559,31 +668,189 @@ public class DatasetService {
     CsvStager stager = sources.stager();
     stager.connection(); // fails now, not on the worker, when no staging connection is configured
     // source.connection is where the server put the last load (clients can't set it): the previous table is dropped there.
-    return new PreparedLoad( id, expectedVersion, d, stager, source.getConnection(), stagedTable( d ) );
+    return new PreparedLoad( id, expectedVersion, d, stager, source.getConnection(), stagedTable( d ), DatasetRefresh.Mode.LOAD,
+      DatasetRefresh.Trigger.USER, false, null );
   }
 
-  /** Loads into the current staging connection, points the dataset at the new table, and drops the one it replaces. */
+  /** The files a load reads, in order: the dataset's file and those appended to it, or the new file instead or after them. */
+  private List<Source> parts( PreparedLoad load ) {
+    Source source = load.definition.getSource();
+    FileSource f = source.getFile();
+    List<Source> parts = new ArrayList<>();
+    if ( load.mode != DatasetRefresh.Mode.REPLACE ) {
+      parts.add( source );
+      for ( DatasetDefinition.AppendedFile a : f.getAppended() ) {
+        parts.add( withFile( source, a ) );
+      }
+    }
+    if ( load.newFile != null ) {
+      parts.add( withFile( source, load.newFile ) );
+    }
+    return parts;
+  }
+
+  private Source withFile( Source source, DatasetDefinition.AppendedFile file ) {
+    DatasetDefinition holder = new DatasetDefinition();
+    holder.setSource( source );
+    Source copy = json.read( json.write( holder ) ).getSource();
+    copy.getFile().setPath( file.getPath() );
+    copy.getFile().setOriginalName( file.getOriginalName() );
+    copy.getFile().setFormat( formatOf( file.getPath() ) );
+    return copy;
+  }
+
+  private static DatasetDefinition.FileFormat formatOf( String path ) {
+    return path.endsWith( ".xlsx" ) ? DatasetDefinition.FileFormat.XLSX
+      : path.endsWith( ".parquet" ) ? DatasetDefinition.FileFormat.PARQUET : DatasetDefinition.FileFormat.CSV;
+  }
+
+  /**
+   * A new file must have the columns the dataset was loaded with, by name, and fit the types the
+   * dataset gives them; otherwise it is refused with every difference.
+   */
+  private void requireSameColumns( DatasetDefinition d, DatasetDefinition.AppendedFile file ) {
+    Source current = d.getSource();
+    Sample fresh = sources.forSource( current ).sample( withFile( current, file ), 50, null );
+    Map<String, DatasetDefinition.ColumnType> found = new java.util.LinkedHashMap<>();
+    fresh.getColumns().forEach( c -> found.put( c.getName(), c.getType() ) );
+    List<String> expected = new ArrayList<>();
+    current.getFile().getStagedColumns().forEach( c -> expected.add( c.getSourceName() ) );
+    if ( expected.isEmpty() ) {
+      sources.forSource( current ).sample( current, 1, null ).getColumns().forEach( c -> expected.add( c.getName() ) );
+    }
+    List<DatasetProblem> problems = new ArrayList<>();
+    for ( String name : expected ) {
+      if ( !found.containsKey( name ) ) {
+        problems.add( new DatasetProblem( "file.columns", "column \"" + name + "\" is missing" ) );
+      }
+    }
+    for ( String name : found.keySet() ) {
+      if ( !expected.contains( name ) ) {
+        problems.add( new DatasetProblem( "file.columns", "column \"" + name + "\" isn't one of the dataset's" ) );
+      }
+    }
+    for ( DatasetDefinition.Column c : d.getColumns() ) {
+      String name = c.getSourceName() == null || c.getSourceName().isEmpty() ? c.getName() : c.getSourceName();
+      DatasetDefinition.ColumnType got = found.get( name );
+      if ( got != null && c.getType() != null && !fits( got, c.getType() ) ) {
+        problems.add( new DatasetProblem( "file.columns", "column \"" + name + "\" holds " + got + " values; the dataset's is "
+          + c.getType() ) );
+      }
+    }
+    if ( !problems.isEmpty() ) {
+      throw new DatasetApiException( Code.VALIDATION_FAILED, "file",
+        "The file's columns don't match the dataset's: " + problems.get( 0 ).getMessage(), problems, null );
+    }
+  }
+
+  /** Whether values detected as {@code found} load into a column of type {@code into}. */
+  static boolean fits( DatasetDefinition.ColumnType found, DatasetDefinition.ColumnType into ) {
+    switch ( into ) {
+      case STRING:
+        return true;
+      case DECIMAL:
+        return found == DatasetDefinition.ColumnType.DECIMAL || found == DatasetDefinition.ColumnType.INTEGER;
+      case TIMESTAMP:
+        return found == DatasetDefinition.ColumnType.TIMESTAMP || found == DatasetDefinition.ColumnType.DATE;
+      default:
+        return found == into;
+    }
+  }
+
+  /**
+   * Loads into the current staging connection and swaps the new table in: the dataset points at it,
+   * the table it replaces is dropped, and a published dataset is republished under the same names.
+   * A failed load changes nothing (its table is dropped, a new file discarded). Each load is recorded.
+   */
   private Staging performLoad( PreparedLoad load, CsvStager.Progress progress ) {
-    DatasetDefinition d = load.definition;
-    Source source = d.getSource();
-    String connection = load.stager.connection();
-    StagedTable table = load.stager.stage( load.id, source, d.getColumns(), progress );
-    source.setConnection( connection );
-    source.getFile().setStagingTable( table.getTable() );
-    source.getFile().setStagedColumns( table.getColumns().stream()
-      .map( c -> new DatasetDefinition.StagedColumn( c.getSourceName(), c.getName() ) ).collect( Collectors.toList() ) );
-    StoredDataset updated;
+    DatasetRefresh record = new DatasetRefresh();
+    record.setId( java.util.UUID.randomUUID().toString() );
+    record.setMode( load.mode );
+    record.setTrigger( load.trigger );
+    record.setUser( currentUser.get() );
+    record.setFile( load.newFile == null ? null : load.newFile.getOriginalName() );
+    record.setStarted( java.time.Instant.now().toString() );
     try {
-      updated = store.update( d, load.expectedVersion );
+      DatasetDefinition d = load.definition;
+      Source source = d.getSource();
+      FileSource file = source.getFile();
+      String connection = load.stager.connection();
+      StagedTable table = load.stager.stage( load.id, parts( load ), d.getColumns(), progress );
+      if ( load.strict && table.getRejected() > 0 ) {
+        load.stager.drop( load.id, connection, table.getTable() );
+        List<DatasetProblem> problems = table.getWarnings().stream().map( w -> new DatasetProblem( "file", w ) )
+          .collect( Collectors.toList() );
+        throw new DatasetApiException( Code.VALIDATION_FAILED, "file", table.getRejected()
+          + " value(s) don't fit their column's type, so nothing was changed: " + ( problems.isEmpty() ? "" : problems.get( 0 ).getMessage() ),
+          problems, null );
+      }
+      source.setConnection( connection );
+      file.setStagingTable( table.getTable() );
+      file.setStagedColumns( table.getColumns().stream()
+        .map( c -> new DatasetDefinition.StagedColumn( c.getSourceName(), c.getName() ) ).collect( Collectors.toList() ) );
+      List<String> replaced = new ArrayList<>();
+      if ( load.mode == DatasetRefresh.Mode.REPLACE ) {
+        replaced.add( file.getPath() );
+        file.getAppended().forEach( a -> replaced.add( a.getPath() ) );
+        file.setPath( load.newFile.getPath() );
+        file.setOriginalName( load.newFile.getOriginalName() );
+        file.setFormat( formatOf( load.newFile.getPath() ) );
+        file.setAppended( new ArrayList<>() );
+      } else if ( load.mode == DatasetRefresh.Mode.APPEND ) {
+        file.getAppended().add( load.newFile );
+      }
+      StoredDataset updated;
+      try {
+        updated = store.update( d, load.expectedVersion );
+      } catch ( RuntimeException e ) {
+        load.stager.drop( load.id, connection, table.getTable() );
+        throw e;
+      }
+      if ( load.previous != null && !( load.previous.equals( table.getTable() ) && connection.equals( load.previousConnection ) ) ) {
+        load.stager.drop( load.id, load.previousConnection, load.previous );
+      }
+      if ( sources.hasFiles() ) {
+        replaced.stream().filter( DatasetFiles::isStored ).forEach( sources.files()::delete );
+      }
+      List<String> warnings = new ArrayList<>( table.getWarnings() );
+      if ( PublishedIds.assigned( updated.getDefinition() ) && sources.canPublish() ) {
+        try {
+          republish( updated.getDefinition() );
+          record.setRepublished( true );
+        } catch ( RuntimeException e ) {
+          LOG.warn( "Dataset " + load.id + " was loaded but could not be republished", e );
+          record.setRepublished( false );
+          warnings.add( 0, "Loaded, but reports still read the previous data: republishing failed (" + e.getMessage() + ")" );
+        }
+      }
+      record.setState( DatasetRefresh.State.SUCCEEDED );
+      record.setRows( table.getRows() );
+      record.setWarnings( warnings.subList( 0, Math.min( 10, warnings.size() ) ) );
+      LOG.debug( "Dataset " + load.id + " loaded " + table.getRows() + " rows into " + table.getTable() );
+      return new Staging( updated, table );
     } catch ( RuntimeException e ) {
-      load.stager.drop( load.id, connection, table.getTable() );
+      if ( load.newFile != null && sources.hasFiles() ) {
+        sources.files().delete( load.newFile.getPath() );
+      }
+      record.setState( DatasetRefresh.State.FAILED );
+      record.setError( e instanceof CsvStager.Cancelled ? "Stopped before it finished" : e.getMessage() );
       throw e;
+    } finally {
+      record.setFinished( java.time.Instant.now().toString() );
+      try {
+        sources.history().add( load.id, record );
+      } catch ( RuntimeException e ) {
+        LOG.warn( "Could not record the load of dataset " + load.id, e );
+      }
     }
-    if ( load.previous != null && !( load.previous.equals( table.getTable() ) && connection.equals( load.previousConnection ) ) ) {
-      load.stager.drop( load.id, load.previousConnection, load.previous );
-    }
-    LOG.debug( "Dataset " + load.id + " loaded " + table.getRows() + " rows into " + table.getTable() );
-    return new Staging( updated, table );
+  }
+
+  /** Brings a published dataset's domain and catalog up to date, under the names it was first published with. */
+  private void republish( DatasetDefinition d ) {
+    ModelPublisher publisher = sources.publisher();
+    String connection = d.getSource().getConnection();
+    PhysicalSource source = PhysicalSource.of( d, connection, publisher.dataSource( connection ) );
+    publisher.publish( connection, generator.generate( d, source, PublishedIds.of( d ) ) );
   }
 
   /** Who the dataset is shared with. Anyone who can see the dataset can see this. */
@@ -657,6 +924,7 @@ public class DatasetService {
     file.setOriginalName( sameFile ? wasFile.getOriginalName() : null );
     file.setStagingTable( wasFile == null ? null : wasFile.getStagingTable() );
     file.setStagedColumns( wasFile == null ? null : wasFile.getStagedColumns() );
+    file.setAppended( wasFile == null ? null : wasFile.getAppended() );
   }
 
   private void requireReadableSource( DatasetDefinition d ) {

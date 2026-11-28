@@ -207,7 +207,7 @@ public class DatasetDefinition {
   /** A file the dataset was loaded from, and how to read it. */
   @JsonInclude( JsonInclude.Include.NON_DEFAULT )
   @JsonPropertyOrder( { "format", "path", "originalName", "encoding", "delimiter", "enclosure", "headerRow", "sheet",
-    "startRow", "stagingTable", "stagedColumns" } )
+    "startRow", "appended", "stagingTable", "stagedColumns" } )
   public static class FileSource {
     private FileFormat format;
     /** Repository or staging path of the uploaded file. */
@@ -226,6 +226,8 @@ public class DatasetDefinition {
     private String stagingTable;
     /** The staging table's column for each of the file's columns, in file order; set by the server. */
     private List<StagedColumn> stagedColumns = new ArrayList<>();
+    /** Files appended after this one (each refresh with mode APPEND adds one), loaded after it in order; set by the server. */
+    private List<AppendedFile> appended = new ArrayList<>();
 
     public FileFormat getFormat() {
       return format;
@@ -313,6 +315,46 @@ public class DatasetDefinition {
 
     public void setStagedColumns( List<StagedColumn> stagedColumns ) {
       this.stagedColumns = stagedColumns == null ? new ArrayList<>() : stagedColumns;
+    }
+
+    public List<AppendedFile> getAppended() {
+      return appended;
+    }
+
+    public void setAppended( List<AppendedFile> appended ) {
+      this.appended = appended == null ? new ArrayList<>() : appended;
+    }
+  }
+
+  /** A file appended to a dataset's file: where it is stored and what it was called. */
+  @JsonInclude( JsonInclude.Include.NON_NULL )
+  @JsonPropertyOrder( { "path", "originalName" } )
+  public static class AppendedFile {
+    private String path;
+    private String originalName;
+
+    public AppendedFile() {
+    }
+
+    public AppendedFile( String path, String originalName ) {
+      this.path = path;
+      this.originalName = originalName;
+    }
+
+    public String getPath() {
+      return path;
+    }
+
+    public void setPath( String path ) {
+      this.path = path;
+    }
+
+    public String getOriginalName() {
+      return originalName;
+    }
+
+    public void setOriginalName( String originalName ) {
+      this.originalName = originalName;
     }
   }
 
