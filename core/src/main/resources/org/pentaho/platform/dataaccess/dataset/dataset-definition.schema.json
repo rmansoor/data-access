@@ -14,6 +14,11 @@
     "owner": { "type": "string" },
     "source": { "$ref": "#/$defs/source" },
     "columns": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/column" } },
+    "excludedColumns": {
+      "description": "The source's columns the author chose to leave out, so an edit can tell them from columns the source added since. Absent when not recorded.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/columnRef" }
+    },
     "model": { "$ref": "#/$defs/model" },
     "relationships": { "type": "array", "items": { "$ref": "#/$defs/relationship" } },
     "security": { "$ref": "#/$defs/security" },
@@ -87,6 +92,15 @@
         "description": { "type": "string" },
         "format": { "type": "string" },
         "hidden": { "type": "boolean" }
+      }
+    },
+    "columnRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourceName"],
+      "properties": {
+        "table": { "type": "string", "minLength": 1 },
+        "sourceName": { "type": "string", "minLength": 1 }
       }
     },
     "model": {

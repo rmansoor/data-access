@@ -70,6 +70,21 @@ public class DatasetJsonTest {
   }
 
   @Test
+  public void writesTheColumnsLeftOutOnlyWhenRecordedEvenWhenNone() {
+    DatasetDefinition d = new DatasetDefinition();
+    d.setId( "x" );
+    assertFalse( json.write( d ).contains( "excludedColumns" ) );
+    d.setExcludedColumns( new java.util.ArrayList<>() );
+    assertTrue( json.write( d ), json.write( d ).replaceAll( "\\s", "" ).contains( "\"excludedColumns\":[]" ) );
+    d.getExcludedColumns().add( new DatasetDefinition.ColumnRef( null, "NOTE" ) );
+    DatasetDefinition back = json.read( json.write( d ) );
+    assertEquals( 1, back.getExcludedColumns().size() );
+    assertEquals( "NOTE", back.getExcludedColumns().get( 0 ).getSourceName() );
+    assertEquals( null, back.getExcludedColumns().get( 0 ).getTable() );
+    assertTrue( json.read( json.write( new DatasetDefinition() ) ).getExcludedColumns() == null );
+  }
+
+  @Test
   public void readsTheModelIntoTypedObjects() throws IOException {
     DatasetDefinition d = json.read( example( "tables-steelwheels-star.json" ) );
     assertEquals( DatasetDefinition.SourceType.TABLES, d.getSource().getType() );

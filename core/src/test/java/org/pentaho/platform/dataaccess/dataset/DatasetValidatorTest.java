@@ -69,6 +69,20 @@ public class DatasetValidatorTest {
   }
 
   @Test
+  public void checksTheColumnsLeftOut() {
+    String head = "{\"schemaVersion\":1,\"id\":\"d\",\"name\":\"n\",\"source\":{\"type\":\"TABLES\",\"connection\":\"c\",\"tables\":[\"A\",\"B\"]},"
+      + "\"columns\":[{\"name\":\"ID\",\"table\":\"A\",\"type\":\"INTEGER\"},{\"name\":\"B_ID\",\"table\":\"B\",\"sourceName\":\"ID\",\"type\":\"INTEGER\"}],"
+      + "\"relationships\":[{\"fromTable\":\"A\",\"fromColumn\":\"ID\",\"toTable\":\"B\",\"toColumn\":\"ID\",\"joinType\":\"INNER\",\"cardinality\":\"MANY_TO_ONE\"}],";
+    assertEquals( List.of(), problems( head + "\"excludedColumns\":[{\"table\":\"A\",\"sourceName\":\"NOTE\"}]}" ) );
+    assertEquals( List.of(), problems( head + "\"excludedColumns\":[]}" ) );
+    assertEquals( List.of(
+      "excludedColumns[0].sourceName: is required",
+      "excludedColumns[1].table: \"C\" is not one of the source's tables",
+      "excludedColumns[2]: \"ID\" is kept as a column, so it can't also be left out" ),
+      problems( head + "\"excludedColumns\":[{\"table\":\"A\"},{\"table\":\"C\",\"sourceName\":\"X\"},{\"table\":\"B\",\"sourceName\":\"ID\"}]}" ) );
+  }
+
+  @Test
   public void findsDuplicateColumnsIgnoringCaseAndMissingTypes() {
     assertEquals( List.of( "columns[1].name: \"Region\" is used by another column", "columns[2].type: is required" ),
       problems( "{\"schemaVersion\":1,\"id\":\"d\",\"name\":\"n\",\"source\":{\"type\":\"SQL\",\"connection\":\"c\",\"sql\":\"q\"},"

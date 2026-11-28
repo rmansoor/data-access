@@ -29,8 +29,8 @@ import java.util.List;
  * without custom code; properties left at their defaults are not written.
  */
 @JsonInclude( JsonInclude.Include.NON_DEFAULT )
-@JsonPropertyOrder( { "schemaVersion", "id", "name", "description", "owner", "source", "columns", "model",
-  "relationships", "security", "refresh", "legacy" } )
+@JsonPropertyOrder( { "schemaVersion", "id", "name", "description", "owner", "source", "columns", "excludedColumns",
+  "model", "relationships", "security", "refresh", "legacy" } )
 public class DatasetDefinition {
 
   private int schemaVersion = DatasetUpgrades.CURRENT_VERSION;
@@ -40,6 +40,11 @@ public class DatasetDefinition {
   private String owner;
   private Source source;
   private List<Column> columns = new ArrayList<>();
+  /**
+   * The source's columns the author chose to leave out, so that an edit can tell them from columns the source
+   * added since; null when not recorded (definitions saved before it was), where the two can't be told apart.
+   */
+  private List<ColumnRef> excludedColumns;
   private Model model;
   private List<Relationship> relationships = new ArrayList<>();
   private Security security;
@@ -102,6 +107,16 @@ public class DatasetDefinition {
 
   public void setColumns( List<Column> columns ) {
     this.columns = columns == null ? new ArrayList<>() : columns;
+  }
+
+  /** Written when recorded, even empty: an empty list means every source column was kept. */
+  @JsonInclude( JsonInclude.Include.NON_NULL )
+  public List<ColumnRef> getExcludedColumns() {
+    return excludedColumns;
+  }
+
+  public void setExcludedColumns( List<ColumnRef> excludedColumns ) {
+    this.excludedColumns = excludedColumns;
   }
 
   public Model getModel() {
@@ -483,6 +498,38 @@ public class DatasetDefinition {
   // Model
 
   public enum Aggregation { SUM, COUNT, COUNT_DISTINCT, AVERAGE, MINIMUM, MAXIMUM }
+
+  /** A source column by its table (TABLES sources with several tables) and its name in the source. */
+  @JsonInclude( JsonInclude.Include.NON_DEFAULT )
+  @JsonPropertyOrder( { "table", "sourceName" } )
+  public static class ColumnRef {
+    private String table;
+    private String sourceName;
+
+    public ColumnRef() {
+    }
+
+    public ColumnRef( String table, String sourceName ) {
+      this.table = table;
+      this.sourceName = sourceName;
+    }
+
+    public String getTable() {
+      return table;
+    }
+
+    public void setTable( String table ) {
+      this.table = table;
+    }
+
+    public String getSourceName() {
+      return sourceName;
+    }
+
+    public void setSourceName( String sourceName ) {
+      this.sourceName = sourceName;
+    }
+  }
 
   /** Dimensions people slice by and measures they aggregate. */
   @JsonInclude( JsonInclude.Include.NON_DEFAULT )
