@@ -244,12 +244,20 @@
       ok.disabled = selected < 0;
     }
 
+    /** Marks the chosen item in place: rebuilding the list would swap the element under the pointer and lose a double click. */
     function pick(target) {
       var index = target && target.getAttribute && target.getAttribute('data-index');
-      if (index !== null && index !== undefined) {
-        selected = parseInt(index, 10);
-        render();
+      if (index === null || index === undefined) {
+        return;
       }
+      selected = parseInt(index, 10);
+      var items = list.childNodes;
+      for (var i = 0; i < items.length; i++) {
+        var on = items[i] === target;
+        items[i].className = 'pho-ds-item' + (on ? ' pho-ds-selected' : '');
+        items[i].setAttribute('aria-selected', on ? 'true' : 'false');
+      }
+      ok.disabled = false;
     }
 
     function onKey(e) {
