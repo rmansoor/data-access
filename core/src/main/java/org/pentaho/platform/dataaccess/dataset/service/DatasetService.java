@@ -91,14 +91,72 @@ public class DatasetService {
     this.sources = sources;
   }
 
-  /** Every dataset the caller may see, by name. */
+  /** Every dataset the caller may see: certified ones first, then by name. */
   public List<StoredDataset> list() {
     requireView();
     return store.list().stream()
       .filter( s -> mayRead( s.getDefinition() ) )
-      .sorted( Comparator.comparing( ( StoredDataset s ) -> String.valueOf( s.getDefinition().getName() ).toLowerCase( Locale.ROOT ) )
+      .sorted( Comparator.comparing( ( StoredDataset s ) -> s.getDefinition().getCertification() == null )
+        .thenComparing( s -> String.valueOf( s.getDefinition().getName() ).toLowerCase( Locale.ROOT ) )
         .thenComparing( s -> s.getDefinition().getId() ) )
       .collect( Collectors.toList() );
+  }
+
+  /** Whether the caller may certify datasets. */
+  public boolean canCertify() {
+    return permissions.canCertify();
+  }
+
+  // ------------------------------------------------------------------------------------------------
+  // Trust: certification and quality
+
+  /** The longest note a certification keeps. */
+  public static final int MAX_CERTIFICATION_NOTE = 500;
+
+  /**
+   * Certifies the dataset as trusted, as the caller, now, with {@code note}; replaces an earlier certification.
+   * Needs the Certify Datasets permission and that the caller can see the dataset, not that they can change it.
+   */
+  public StoredDataset certify( String id, String note ) {
+    requireView();
+    requireCertify();
+    String text = note == null ? null : note.trim();
+    if ( text != null && text.length() > MAX_CERTIFICATION_NOTE ) {
+      throw new DatasetApiException( Code.VALIDATION_FAILED, "note", "A certification note can be at most " + MAX_CERTIFICATION_NOTE
+        + " characters", List.of( new DatasetProblem( "note", "must be at most " + MAX_CERTIFICATION_NOTE + " characters" ) ), null );
+    }
+    StoredDataset s = readable( id );
+    DatasetDefinition d = s.getDefinition();
+    d.setCertification( new DatasetDefinition.Certification( currentUser.get(), java.time.Instant.now().toString(),
+      text == null || text.isEmpty() ? null : text ) );
+    return store.update( d, s.getVersion() );
+  }
+
+  /** Withdraws the dataset's certification (Certify Datasets permission); nothing to do when it has none. */
+  public StoredDataset uncertify( String id ) {
+    requireView();
+    requireCertify();
+    StoredDataset s = readable( id );
+    if ( s.getDefinition().getCertification() == null ) {
+      return s;
+    }
+    s.getDefinition().setCertification( null );
+    return store.update( s.getDefinition(), s.getVersion() );
+  }
+
+  /**
+   * A quality warning when the dataset's latest load failed (so its data is older than it should be); it clears
+   * with the next load that succeeds. Empty when there is none, or no load has been recorded.
+   */
+  public java.util.Optional<DatasetRefresh> failedRefresh( String id ) {
+    try {
+      List<DatasetRefresh> loads = sources.history().list( id );
+      return loads.isEmpty() || loads.get( 0 ).getState() != DatasetRefresh.State.FAILED
+        ? java.util.Optional.empty() : java.util.Optional.of( loads.get( 0 ) );
+    } catch ( RuntimeException e ) {
+      LOG.warn( "Could not read the loads of dataset " + id, e );
+      return java.util.Optional.empty();
+    }
   }
 
   public StoredDataset get( String id ) {
@@ -149,6 +207,8 @@ public class DatasetService {
         null, null );
     }
     keepServerFields( definition, current );
+    // A certification vouches for what was reviewed: it goes when the data or model changes, not with a renaming.
+    definition.setCertification( sameContent( definition, current ) ? current.getCertification() : null );
     definition.setSchemaVersion( DatasetUpgrades.CURRENT_VERSION );
     return store.update( definition, expectedVersion );
   }
@@ -902,6 +962,7 @@ public class DatasetService {
    */
   private static void keepServerFields( DatasetDefinition incoming, DatasetDefinition current ) {
     incoming.setLegacy( current == null ? null : current.getLegacy() );
+    incoming.setCertification( current == null ? null : current.getCertification() );
     Source in = incoming.getSource();
     if ( in == null || in.getType() != SourceType.FILE ) {
       return;
@@ -925,6 +986,16 @@ public class DatasetService {
     file.setStagingTable( wasFile == null ? null : wasFile.getStagingTable() );
     file.setStagedColumns( wasFile == null ? null : wasFile.getStagedColumns() );
     file.setAppended( wasFile == null ? null : wasFile.getAppended() );
+  }
+
+  /** Whether two definitions read the same data the same way: source, columns, model, joins and row security. */
+  private boolean sameContent( DatasetDefinition a, DatasetDefinition b ) {
+    com.fasterxml.jackson.databind.ObjectMapper m = DatasetJson.mapper();
+    return java.util.Objects.equals( m.valueToTree( a.getSource() ), m.valueToTree( b.getSource() ) )
+      && java.util.Objects.equals( m.valueToTree( a.getColumns() ), m.valueToTree( b.getColumns() ) )
+      && java.util.Objects.equals( m.valueToTree( a.getModel() ), m.valueToTree( b.getModel() ) )
+      && java.util.Objects.equals( m.valueToTree( a.getRelationships() ), m.valueToTree( b.getRelationships() ) )
+      && java.util.Objects.equals( m.valueToTree( a.getSecurity() ), m.valueToTree( b.getSecurity() ) );
   }
 
   private void requireReadableSource( DatasetDefinition d ) {
@@ -1028,6 +1099,12 @@ public class DatasetService {
   private void requireView() {
     if ( !permissions.canView() ) {
       throw new DatasetApiException( Code.FORBIDDEN, "You don't have permission to see datasets" );
+    }
+  }
+
+  private void requireCertify() {
+    if ( !permissions.canCertify() ) {
+      throw new DatasetApiException( Code.FORBIDDEN, "You don't have permission to certify datasets" );
     }
   }
 

@@ -77,15 +77,19 @@ public class DatasetsResource {
   }
 
   /**
-   * {@code {"datasets": [{id, name, description, owner, sourceType, version, updated, published?}]}}, by name;
-   * {@code published} ({domainId, catalogName}) once the dataset has been published.
+   * {@code {"canCertify": bool, "datasets": [{id, name, description, owner, sourceType, version, updated, published?,
+   * certification?, warning?}]}}, certified first, then by name. {@code published} ({domainId, catalogName}) once the
+   * dataset has been published; {@code certification} ({by, at, note}) while it is certified; {@code warning}
+   * ({kind: "REFRESH_FAILED", at, trigger, message}) while its latest load has failed.
    */
   @GET
   public Response list() {
     return handle( () -> {
+      DatasetService datasets = service.get();
       ObjectNode body = mapper.createObjectNode();
+      body.put( "canCertify", datasets.canCertify() );
       ArrayNode items = body.putArray( "datasets" );
-      for ( StoredDataset s : service.get().list() ) {
+      for ( StoredDataset s : datasets.list() ) {
         DatasetDefinition d = s.getDefinition();
         ObjectNode item = items.addObject();
         item.put( "id", d.getId() );
@@ -101,6 +105,17 @@ public class DatasetsResource {
           item.putObject( "published" ).put( "domainId", d.getLegacy().getDomainId() )
             .put( "catalogName", d.getLegacy().getCatalogName() );
         }
+        if ( d.getCertification() != null ) {
+          item.set( "certification", mapper.valueToTree( d.getCertification() ) );
+        }
+        datasets.failedRefresh( d.getId() ).ifPresent( failed -> {
+          ObjectNode warning = item.putObject( "warning" ).put( "kind", "REFRESH_FAILED" );
+          putIfPresent( warning, "at", failed.getFinished() );
+          if ( failed.getTrigger() != null ) {
+            warning.put( "trigger", failed.getTrigger().name() );
+          }
+          putIfPresent( warning, "message", failed.getError() );
+        } );
       }
       return Response.ok( mapper.writeValueAsString( body ) ).build();
     } );
@@ -149,6 +164,39 @@ public class DatasetsResource {
       s.delete( id, expected( s, id, ifMatch ) );
       return Response.noContent().build();
     } );
+  }
+
+  /**
+   * Certifies the dataset as trusted, as the caller, with an optional {@code {"note": "…"}} (at most 500 characters);
+   * answers the definition with its new ETag. Needs the Certify Datasets permission; no If-Match, since it changes
+   * nothing an author edits. Editing the dataset's source, columns, model, joins or row security withdraws it.
+   */
+  @PUT
+  @Path( "{id}/certification" )
+  @Consumes( MediaType.WILDCARD )
+  public Response certify( @PathParam( "id" ) String id, String body ) {
+    return handle( () -> {
+      String note = null;
+      if ( body != null && !body.trim().isEmpty() ) {
+        com.fasterxml.jackson.databind.JsonNode node;
+        try {
+          node = mapper.readTree( body );
+        } catch ( JsonProcessingException e ) {
+          throw new DatasetApiException( Code.INVALID_DEFINITION, "Send {\"note\": \"…\"} as JSON, or nothing" );
+        }
+        if ( node.hasNonNull( "note" ) ) {
+          note = node.get( "note" ).asText();
+        }
+      }
+      return definition( Response.ok(), service.get().certify( id, note ) );
+    } );
+  }
+
+  /** Withdraws the dataset's certification (Certify Datasets permission); answers the definition with its ETag. */
+  @DELETE
+  @Path( "{id}/certification" )
+  public Response uncertify( @PathParam( "id" ) String id ) {
+    return handle( () -> definition( Response.ok(), service.get().uncertify( id ) ) );
   }
 
   /** {@code {"valid": true|false, "problems": [{path, message}]}}: what blocks publishing. */

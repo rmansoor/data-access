@@ -23,6 +23,10 @@
     "relationships": { "type": "array", "items": { "$ref": "#/$defs/relationship" } },
     "security": { "$ref": "#/$defs/security" },
     "refresh": { "$ref": "#/$defs/refresh" },
+    "certification": {
+      "description": "Who certified the dataset as trusted, when and why. Set by the server (PUT .../certification); cleared when the dataset's content changes.",
+      "$ref": "#/$defs/certification"
+    },
     "legacy": { "$ref": "#/$defs/legacy" }
   },
   "$defs": {
@@ -92,6 +96,15 @@
         "description": { "type": "string" },
         "format": { "type": "string" },
         "hidden": { "type": "boolean" }
+      }
+    },
+    "certification": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "by": { "type": "string" },
+        "at": { "type": "string", "format": "date-time" },
+        "note": { "type": "string", "maxLength": 500 }
       }
     },
     "columnRef": {

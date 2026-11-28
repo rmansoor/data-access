@@ -30,7 +30,7 @@ import java.util.List;
  */
 @JsonInclude( JsonInclude.Include.NON_DEFAULT )
 @JsonPropertyOrder( { "schemaVersion", "id", "name", "description", "owner", "source", "columns", "excludedColumns",
-  "model", "relationships", "security", "refresh", "legacy" } )
+  "model", "relationships", "security", "refresh", "certification", "legacy" } )
 public class DatasetDefinition {
 
   private int schemaVersion = DatasetUpgrades.CURRENT_VERSION;
@@ -49,6 +49,7 @@ public class DatasetDefinition {
   private List<Relationship> relationships = new ArrayList<>();
   private Security security;
   private Refresh refresh;
+  private Certification certification;
   private LegacyIds legacy;
 
   /** Always written: readers use it to upgrade older files (see {@link DatasetUpgrades}). */
@@ -149,6 +150,15 @@ public class DatasetDefinition {
 
   public void setRefresh( Refresh refresh ) {
     this.refresh = refresh;
+  }
+
+  /** Who certified the dataset as trusted, when, and why; set by the server (certify), cleared when its content changes. */
+  public Certification getCertification() {
+    return certification;
+  }
+
+  public void setCertification( Certification certification ) {
+    this.certification = certification;
   }
 
   public LegacyIds getLegacy() {
@@ -498,6 +508,48 @@ public class DatasetDefinition {
   // Model
 
   public enum Aggregation { SUM, COUNT, COUNT_DISTINCT, AVERAGE, MINIMUM, MAXIMUM }
+
+  /** A certification: who gave it, when (ISO-8601 instant) and their note. */
+  @JsonInclude( JsonInclude.Include.NON_DEFAULT )
+  @JsonPropertyOrder( { "by", "at", "note" } )
+  public static class Certification {
+    private String by;
+    private String at;
+    private String note;
+
+    public Certification() {
+    }
+
+    public Certification( String by, String at, String note ) {
+      this.by = by;
+      this.at = at;
+      this.note = note;
+    }
+
+    public String getBy() {
+      return by;
+    }
+
+    public void setBy( String by ) {
+      this.by = by;
+    }
+
+    public String getAt() {
+      return at;
+    }
+
+    public void setAt( String at ) {
+      this.at = at;
+    }
+
+    public String getNote() {
+      return note;
+    }
+
+    public void setNote( String note ) {
+      this.note = note;
+    }
+  }
 
   /** A source column by its table (TABLES sources with several tables) and its name in the source. */
   @JsonInclude( JsonInclude.Include.NON_DEFAULT )
