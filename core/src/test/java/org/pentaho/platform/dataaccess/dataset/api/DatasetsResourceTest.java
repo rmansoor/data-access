@@ -152,6 +152,7 @@ public class DatasetsResourceTest {
     assertEquals( "suzy", item.get( "owner" ).asText() );
     assertEquals( "1", item.get( "version" ).asText() );
     assertNull( item.get( "description" ) );
+    assertNull( "not published yet", item.get( "published" ) );
   }
 
   @Test

@@ -436,7 +436,12 @@
           "owner": { "type": "string" },
           "sourceType": { "type": "string", "enum": ["TABLES", "SQL", "FILE"] },
           "version": { "type": "string", "description": "The same value as the dataset's ETag" },
-          "updated": { "type": "string", "format": "date-time" }
+          "updated": { "type": "string", "format": "date-time" },
+          "published": {
+            "type": "object",
+            "description": "Present once the dataset has been published: the names reports find it by",
+            "properties": { "domainId": { "type": "string" }, "catalogName": { "type": "string" } }
+          }
         }
       },
       "Sample": {

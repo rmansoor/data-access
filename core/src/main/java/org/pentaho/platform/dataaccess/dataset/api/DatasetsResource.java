@@ -75,7 +75,10 @@ public class DatasetsResource {
     this.service = service;
   }
 
-  /** {@code {"datasets": [{id, name, description, owner, sourceType, version, updated}]}}, by name. */
+  /**
+   * {@code {"datasets": [{id, name, description, owner, sourceType, version, updated, published?}]}}, by name;
+   * {@code published} ({domainId, catalogName}) once the dataset has been published.
+   */
   @GET
   public Response list() {
     return handle( () -> {
@@ -93,6 +96,10 @@ public class DatasetsResource {
         }
         item.put( "version", s.getVersion() );
         item.put( "updated", s.getUpdated().toString() );
+        if ( org.pentaho.platform.dataaccess.dataset.model.PublishedIds.assigned( d ) ) {
+          item.putObject( "published" ).put( "domainId", d.getLegacy().getDomainId() )
+            .put( "catalogName", d.getLegacy().getCatalogName() );
+        }
       }
       return Response.ok( mapper.writeValueAsString( body ) ).build();
     } );
