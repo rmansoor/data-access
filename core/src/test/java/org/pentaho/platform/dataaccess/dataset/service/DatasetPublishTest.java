@@ -218,6 +218,22 @@ public class DatasetPublishTest {
   }
 
   @Test
+  public void anInvalidModelIsntPublished() {
+    StoredDataset s = loadedOrders();
+    DatasetDefinition d = s.getDefinition();
+    d.getModel().getMeasures().get( 0 ).setName( "Region" ); // the dimension's name too
+    s = service.update( "orders", d, s.getVersion() ); // a draft may be invalid
+    try {
+      service.publish( "orders", s.getVersion() );
+      fail( "published" );
+    } catch ( DatasetApiException e ) {
+      assertEquals( Code.VALIDATION_FAILED, e.getCode() );
+      assertEquals( "model.measures[0].name", e.getPath() );
+    }
+    assertTrue( published.domains.isEmpty() );
+  }
+
+  @Test
   public void aStaleVersionIsRefused() {
     loadedOrders();
     try {

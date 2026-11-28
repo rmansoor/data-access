@@ -231,7 +231,12 @@ public class DatasetService {
       throw new DatasetApiException( Code.STALE_VERSION, "The dataset changed since it was read; read it again before publishing" );
     }
     DatasetDefinition d = json.read( json.write( current.getDefinition() ) );
-    requireReadableSource( d );
+    // Drafts may be incomplete; what is published must be valid as a whole (model, relationships…).
+    List<DatasetProblem> problems = validator.validate( d );
+    if ( !problems.isEmpty() ) {
+      throw new DatasetApiException( Code.VALIDATION_FAILED, problems.get( 0 ).getPath(),
+        "The dataset can't be published: " + problems.get( 0 ), problems, null );
+    }
     ModelPublisher publisher = sources.publisher();
     String connection = d.getSource().getConnection();
     if ( connection == null || connection.trim().isEmpty() ) {
