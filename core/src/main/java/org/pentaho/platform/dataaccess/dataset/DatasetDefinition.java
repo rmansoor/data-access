@@ -149,7 +149,7 @@ public class DatasetDefinition {
 
   public enum SourceType { TABLES, SQL, FILE }
 
-  public enum FileFormat { CSV }
+  public enum FileFormat { CSV, XLSX }
 
   /** Where the rows come from: database tables, a SQL query, or a file staged into a table. */
   @JsonInclude( JsonInclude.Include.NON_DEFAULT )
@@ -206,8 +206,8 @@ public class DatasetDefinition {
 
   /** A file the dataset was loaded from, and how to read it. */
   @JsonInclude( JsonInclude.Include.NON_DEFAULT )
-  @JsonPropertyOrder( { "format", "path", "originalName", "encoding", "delimiter", "enclosure", "headerRow", "stagingTable",
-    "stagedColumns" } )
+  @JsonPropertyOrder( { "format", "path", "originalName", "encoding", "delimiter", "enclosure", "headerRow", "sheet",
+    "startRow", "stagingTable", "stagedColumns" } )
   public static class FileSource {
     private FileFormat format;
     /** Repository or staging path of the uploaded file. */
@@ -218,6 +218,10 @@ public class DatasetDefinition {
     private String delimiter;
     private String enclosure;
     private boolean headerRow;
+    /** XLSX: the sheet to read; the first sheet when not set. */
+    private String sheet;
+    /** XLSX: the row the table starts at (its header, or its first row of data), counting from 1; 1 when not set. */
+    private int startRow;
     /** The table the file is staged into ({@code schema.table} when a staging schema is set); set by the server. */
     private String stagingTable;
     /** The staging table's column for each of the file's columns, in file order; set by the server. */
@@ -277,6 +281,22 @@ public class DatasetDefinition {
 
     public void setHeaderRow( boolean headerRow ) {
       this.headerRow = headerRow;
+    }
+
+    public String getSheet() {
+      return sheet;
+    }
+
+    public void setSheet( String sheet ) {
+      this.sheet = sheet;
+    }
+
+    public int getStartRow() {
+      return startRow;
+    }
+
+    public void setStartRow( int startRow ) {
+      this.startRow = startRow;
     }
 
     public String getStagingTable() {

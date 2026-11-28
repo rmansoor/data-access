@@ -90,14 +90,28 @@ public class CsvSourceAdapter implements SourceAdapter {
     final String enclosure;
     final int header;
     final int detectLines;
+    /** A workbook: read through {@link XlsxRows} instead of as text. */
+    final boolean workbook;
+    /** The workbook's sheet to read; null for the first. */
+    final String sheet;
+    /** The workbook row the table starts at, from 1. */
+    final int startRow;
 
     CsvFile( Path path, String encoding, String delimiter, String enclosure, int header, int detectLines ) {
+      this( path, encoding, delimiter, enclosure, header, detectLines, false, null, 1 );
+    }
+
+    CsvFile( Path path, String encoding, String delimiter, String enclosure, int header, int detectLines, boolean workbook,
+             String sheet, int startRow ) {
       this.path = path;
       this.encoding = encoding;
       this.delimiter = delimiter;
       this.enclosure = enclosure;
       this.header = header;
       this.detectLines = detectLines;
+      this.workbook = workbook;
+      this.sheet = sheet;
+      this.startRow = startRow;
     }
   }
 
@@ -122,7 +136,9 @@ public class CsvSourceAdapter implements SourceAdapter {
     CsvFile f = open( source );
     try {
       List<List<String>> lines = lines( f, Math.max( f.detectLines, f.header + limit + 1 ) );
-      return profile( lines, f, limit );
+      Sample sample = profile( lines, f, limit );
+      return f.workbook ? new Sample( sample.getColumns(), sample.getRows(), sample.isTruncated(), XlsxRows.sheets( f.path ) )
+        : sample;
     } catch ( IOException | KettleException e ) {
       throw JdbcSourceSupport.failed( "The file could not be read: " + e.getMessage(), e );
     }
@@ -134,14 +150,24 @@ public class CsvSourceAdapter implements SourceAdapter {
     if ( f == null ) {
       throw JdbcSourceSupport.invalid( FILE, "is required" );
     }
-    if ( f.getFormat() != null && f.getFormat() != FileFormat.CSV ) {
-      throw JdbcSourceSupport.invalid( FILE + ".format", "is not supported yet (" + f.getFormat() + ")" );
-    }
     if ( f.getPath() == null || f.getPath().trim().isEmpty() ) {
       throw JdbcSourceSupport.invalid( FILE + ".path", "is required" );
     }
     Path path = files.locate( f.getPath() ).orElseThrow(
       () -> JdbcSourceSupport.invalid( FILE + ".path", "names no uploaded file (\"" + f.getPath() + "\")" ) );
+    if ( f.getFormat() == FileFormat.XLSX ) {
+      int header = f.isHeaderRow() ? 1 : 0;
+      String sheet = blank( f.getSheet() ) ? null : f.getSheet();
+      try {
+        if ( sheet != null && !XlsxRows.sheets( path ).contains( sheet ) ) {
+          throw JdbcSourceSupport.invalid( FILE + ".sheet", "names no sheet of the workbook (\"" + sheet + "\")" );
+        }
+      } catch ( IOException e ) {
+        throw JdbcSourceSupport.failed( "The file could not be read: " + e.getMessage(), e );
+      }
+      return new CsvFile( path, null, null, null, header, Math.max( limits.getTypeDetectionRows(), header + 1 ), true, sheet,
+        Math.max( 1, f.getStartRow() ) );
+    }
     try {
       String encoding = blank( f.getEncoding() ) ? detectEncoding( path ) : f.getEncoding();
       if ( !Charset.isSupported( encoding ) ) {
@@ -266,6 +292,10 @@ public class CsvSourceAdapter implements SourceAdapter {
 
   /** Reads the file line by line, header included, without holding it in memory. */
   static void eachLine( CsvFile f, LineHandler handler ) throws IOException, KettleException {
+    if ( f.workbook ) {
+      XlsxRows.each( f.path, f.sheet, f.startRow, handler );
+      return;
+    }
     int fileType = new CsvInspector().determineFileFormat( firstLine( f.path, f.encoding ) );
     try ( InputStream in = BOMInputStream.builder().setInputStream( Files.newInputStream( f.path ) ).get();
           BufferedInputStreamReader reader = new BufferedInputStreamReader( new InputStreamReader( in, f.encoding ) ) ) {

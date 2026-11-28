@@ -190,11 +190,11 @@
       "put": {
         "tags": ["Datasets"],
         "operationId": "uploadDatasetFile",
-        "summary": "Upload the dataset's CSV file",
+        "summary": "Upload the dataset's CSV file or Excel workbook",
         "description": "The request body is the file itself, sent as is (any content type, such as text/csv). The server stores it under a name it chooses, in a folder for the dataset that isn't served to browsers, and sets `source.file.path` and `source.file.originalName`. A dataset without a source gets a FILE source (CSV, header row). The file it replaces is deleted; the staging table stays until the next load. The largest file accepted is set by `data-access-dataset-upload-max-mb` (500 MB by default).",
         "parameters": [
           { "$ref": "#/components/parameters/IfMatch" },
-          { "name": "name", "in": "query", "required": false, "description": "The file's name on the uploader's computer: .csv, .txt or .tsv", "schema": { "type": "string" } }
+          { "name": "name", "in": "query", "required": false, "description": "The file's name on the uploader's computer: .csv, .txt or .tsv, or .xlsx for an Excel workbook (source.file.format becomes XLSX; an old .xls is refused)", "schema": { "type": "string" } }
         ],
         "requestBody": { "required": true, "content": { "*/*": { "schema": { "type": "string", "format": "binary" } } } },
         "responses": {
@@ -204,7 +204,7 @@
           "404": { "$ref": "#/components/responses/NotFound" },
           "412": { "$ref": "#/components/responses/StaleVersion" },
           "413": { "description": "`too-large`: the file is larger than the server accepts", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
-          "415": { "description": "`unsupported-file`: not a .csv, .txt or .tsv file, empty, or not text", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "415": { "description": "`unsupported-file`: not a .csv, .txt, .tsv or .xlsx file, empty, not text, or (for .xlsx) not an Excel workbook", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
           "428": { "$ref": "#/components/responses/VersionRequired" },
           "500": { "$ref": "#/components/responses/Internal" },
           "501": { "$ref": "#/components/responses/NotImplemented" }
@@ -450,7 +450,8 @@
         "properties": {
           "columns": { "type": "array", "items": { "$ref": "#/components/schemas/SourceColumn" } },
           "rows": { "type": "array", "items": { "type": "array", "items": { "type": ["string", "number", "boolean", "null"] } } },
-          "truncated": { "type": "boolean", "description": "The source has more rows than were returned" }
+          "truncated": { "type": "boolean", "description": "The source has more rows than were returned" },
+          "sheets": { "type": "array", "items": { "type": "string" }, "description": "An Excel workbook's sheets, in order, so the one to read (source.file.sheet) can be chosen; absent for other sources" }
         }
       },
       "SourceColumn": {

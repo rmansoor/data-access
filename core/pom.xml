@@ -21,6 +21,13 @@
   </properties>
 
   <dependencies>
+    <!-- Excel workbooks (.xlsx) as dataset files; the server ships POI, so it is provided. -->
+    <dependency>
+      <groupId>org.apache.poi</groupId>
+      <artifactId>poi-ooxml</artifactId>
+      <version>5.5.1</version>
+      <scope>provided</scope>
+    </dependency>
     <dependency>
       <groupId>io.swagger</groupId>
       <artifactId>swagger-annotations</artifactId>
