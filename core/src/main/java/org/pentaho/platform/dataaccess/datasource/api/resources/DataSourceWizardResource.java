@@ -37,6 +37,7 @@ import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.FormParam;
+import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
@@ -48,6 +49,9 @@ import org.glassfish.jersey.media.multipart.FormDataBodyPart;
 import org.pentaho.platform.api.engine.PentahoAccessControlException;
 import org.pentaho.platform.api.repository2.unified.webservices.RepositoryFileAclDto;
 import org.pentaho.platform.dataaccess.datasource.api.DataSourceWizardService;
+import org.pentaho.platform.dataaccess.datasource.beans.LogicalModelSummary;
+import org.pentaho.platform.dataaccess.datasource.wizard.service.DatasourceServiceException;
+import org.pentaho.platform.dataaccess.datasource.wizard.service.impl.DSWDatasourceServiceImpl;
 import org.pentaho.platform.dataaccess.datasource.utils.ConvertMultipartDataToJavaObject;
 import org.pentaho.platform.web.http.api.resources.JaxbList;
 
@@ -70,6 +74,72 @@ public class DataSourceWizardResource {
 
   protected DataSourceWizardService createDataSourceWizardService() {
     return new DataSourceWizardService();
+  }
+
+  protected DSWDatasourceServiceImpl createDswDatasourceService() {
+    return new DSWDatasourceServiceImpl();
+  }
+
+  /**
+   * The metadata models a report or analysis can be built on, for choosing one: those visible in
+   * {@code context} (a model with no visibility setting is visible everywhere). This is what the
+   * data source selection dialog lists; it replaces the GWT-RPC call the old dialog made.
+   *
+   * <p><b>Example Request:</b><br />
+   *    GET pentaho/plugin/data-access/api/datasource/dsw/logicalModels?context=reporting
+   * </p>
+   *
+   * @param context where the model will be used, such as "reporting" or "analyzer"
+   * @return {@code [{"domainId": "...", "modelId": "...", "modelName": "..."}]}, by name
+   */
+  @GET
+  @Path( "/logicalModels" )
+  @Produces( APPLICATION_JSON )
+  @StatusCodes( {
+    @ResponseCode( code = 200, condition = "The models" ),
+    @ResponseCode( code = 401, condition = "The caller may not see data sources" )
+  } )
+  public Response getLogicalModels( @QueryParam( "context" ) String context ) {
+    try {
+      List<LogicalModelSummary> models = createDswDatasourceService().getLogicalModels( context == null ? "" : context );
+      com.fasterxml.jackson.databind.node.ArrayNode body = new ObjectMapper().createArrayNode();
+      models.stream()
+        .sorted( java.util.Comparator.comparing( ( LogicalModelSummary m ) -> String.valueOf( m.getModelName() ),
+          String.CASE_INSENSITIVE_ORDER ) )
+        .forEach( m -> body.addObject().put( "domainId", m.getDomainId() ).put( "modelId", m.getModelId() )
+          .put( "modelName", m.getModelName() ) );
+      return Response.ok( body.toString(), APPLICATION_JSON ).build();
+    } catch ( DatasourceServiceException e ) {
+      return Response.status( UNAUTHORIZED ).build();
+    }
+  }
+
+  /**
+   * Deletes one logical model of a domain (and the domain with its analysis schema when it was the
+   * last one), as the old data source dialog did over GWT-RPC.
+   *
+   * <p><b>Example Request:</b><br />
+   *    DELETE pentaho/plugin/data-access/api/datasource/dsw/logicalModels?domainId=orders.xmi&amp;modelName=Orders
+   * </p>
+   */
+  @DELETE
+  @Path( "/logicalModels" )
+  @StatusCodes( {
+    @ResponseCode( code = 204, condition = "Deleted" ),
+    @ResponseCode( code = 400, condition = "domainId or modelName is missing" ),
+    @ResponseCode( code = 401, condition = "The caller may not manage data sources" ),
+    @ResponseCode( code = 404, condition = "Nothing was deleted: no such model, or the caller may not manage data sources" )
+  } )
+  public Response deleteLogicalModel( @QueryParam( "domainId" ) String domainId, @QueryParam( "modelName" ) String modelName ) {
+    if ( domainId == null || domainId.isEmpty() || modelName == null || modelName.isEmpty() ) {
+      return Response.status( Response.Status.BAD_REQUEST ).build();
+    }
+    try {
+      return createDswDatasourceService().deleteLogicalModel( domainId, modelName )
+        ? Response.noContent().build() : Response.status( NOT_FOUND ).build();
+    } catch ( DatasourceServiceException e ) {
+      return Response.status( UNAUTHORIZED ).build();
+    }
   }
 
   /**

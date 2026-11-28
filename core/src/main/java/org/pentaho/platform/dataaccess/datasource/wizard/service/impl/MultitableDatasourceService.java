@@ -25,7 +25,6 @@ import java.util.HashMap;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.pentaho.agilebi.modeler.geo.GeoContext;
-import org.pentaho.agilebi.modeler.gwt.BogoPojo;
 import org.pentaho.agilebi.modeler.models.JoinFieldModel;
 import org.pentaho.agilebi.modeler.models.JoinRelationshipModel;
 import org.pentaho.agilebi.modeler.models.JoinTableModel;
@@ -34,7 +33,7 @@ import org.pentaho.agilebi.modeler.util.MultiTableModelerSource;
 import org.pentaho.database.dialect.PDIDialect;
 import org.pentaho.database.model.DatabaseType;
 import org.pentaho.database.model.IDatabaseConnection;
-import org.pentaho.database.util.DatabaseUtil;
+import org.pentaho.platform.dataaccess.datasource.connection.DatabaseUtil;
 import org.pentaho.di.core.database.Database;
 import org.pentaho.di.core.database.DatabaseMeta;
 import org.pentaho.di.core.exception.KettleDatabaseException;
@@ -50,7 +49,7 @@ import org.pentaho.platform.dataaccess.datasource.utils.DataAccessPermissionUtil
 import org.pentaho.platform.dataaccess.datasource.wizard.IDatasourceSummary;
 import org.pentaho.platform.dataaccess.datasource.wizard.service.ConnectionServiceException;
 import org.pentaho.platform.dataaccess.datasource.wizard.service.DatasourceServiceException;
-import org.pentaho.platform.dataaccess.datasource.wizard.service.gwt.IGwtJoinSelectionService;
+import org.pentaho.platform.dataaccess.datasource.wizard.service.IJoinSelectionService;
 import org.pentaho.platform.dataaccess.datasource.wizard.service.impl.utils.ConnectionServiceHelper;
 import org.pentaho.platform.dataaccess.datasource.wizard.service.impl.utils.LegacyDatasourceConverter;
 import org.pentaho.platform.dataaccess.datasource.wizard.sources.query.QueryDatasourceSummary;
@@ -59,7 +58,7 @@ import org.pentaho.platform.engine.core.system.PentahoSessionHolder;
 
 import com.thoughtworks.xstream.XStream;
 
-public class MultitableDatasourceService extends PentahoBase implements IGwtJoinSelectionService {
+public class MultitableDatasourceService extends PentahoBase implements IJoinSelectionService {
 
   private DatabaseMeta databaseMeta;
   private ConnectionServiceImpl connectionServiceImpl;
@@ -256,10 +255,6 @@ public class MultitableDatasourceService extends PentahoBase implements IGwtJoin
       logger.error( e );
       throw new DatasourceServiceException( e );
     }
-  }
-
-  public BogoPojo gwtWorkaround( BogoPojo pojo ) {
-    return pojo;
   }
 
   @Override

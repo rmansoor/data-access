@@ -50,7 +50,6 @@ import org.pentaho.platform.dataaccess.datasource.beans.LogicalModelSummary;
 import org.pentaho.platform.dataaccess.datasource.beans.SerializedResultSet;
 import org.pentaho.platform.dataaccess.datasource.wizard.models.CsvFileInfo;
 import org.pentaho.platform.dataaccess.datasource.wizard.models.DatasourceDTO;
-import org.pentaho.platform.dataaccess.datasource.wizard.models.DatasourceModel;
 import org.pentaho.platform.dataaccess.datasource.wizard.models.ModelInfo;
 import org.pentaho.platform.dataaccess.datasource.wizard.service.DatasourceServiceException;
 import org.pentaho.platform.dataaccess.datasource.wizard.service.SqlQueriesNotSupportedException;
@@ -747,13 +746,13 @@ public class DSWDatasourceServiceImplTest {
     TestObjectFactory factory = new TestObjectFactory();
     PentahoSystem.registerObjectFactory( factory );
 
-    DatasourceModel datasourceModel = spy( new DatasourceModel() );
-    doReturn( "testdatasource" ).when( datasourceModel ).generateTableName();
-    datasourceModel.setDatasourceName( "testDatasource" );
-    datasourceModel.setDatasourceType( DatasourceType.CSV );
-
-    DatasourceDTO dto = DatasourceDTO.generateDTO( datasourceModel );
-    assertNotNull( dto );
+    // The DTO a CSV data source saved: its name, type and staging table.
+    ModelInfo modelInfo = new ModelInfo();
+    modelInfo.setStageTableName( "testdatasource" );
+    DatasourceDTO dto = new DatasourceDTO();
+    dto.setDatasourceName( "testDatasource" );
+    dto.setDatasourceType( DatasourceType.CSV );
+    dto.setCsvModelInfo( modelInfo );
 
     String serializedDTO = dswService.serializeModelState( dto );
     dswService.deSerializeModelState( serializedDTO );

@@ -1,0 +1,116 @@
+/*
+ * The data source selection dialog (DatasourceEditor.nocache.js). PUC's Mantle.jsp loads this file
+ * by name, as it did for the GWT module this replaces.
+ */
+.pho-ds-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(15, 18, 40, 0.45);
+}
+
+.pho-ds-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  max-width: 460px;
+  max-height: calc(100vh - 32px);
+  padding: 20px;
+  border-radius: 12px;
+  background: #fff;
+  color: #1c2150;
+  font: 14px/1.4 "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  box-shadow: 0 18px 48px rgba(15, 18, 40, 0.28);
+}
+
+.pho-ds-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.pho-ds-filter {
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid #c9cde0;
+  border-radius: 8px;
+  font: inherit;
+}
+
+.pho-ds-status {
+  margin: 0;
+  color: #5b6185;
+}
+
+.pho-ds-list {
+  flex: 1;
+  min-height: 120px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid #e3e6f0;
+  border-radius: 8px;
+}
+
+.pho-ds-item {
+  padding: 8px 12px;
+  border-top: 1px solid #eef0f6;
+  cursor: pointer;
+}
+
+.pho-ds-item:first-child {
+  border-top: 0;
+}
+
+.pho-ds-item:hover,
+.pho-ds-item:focus {
+  background: #eef1fc;
+  outline: none;
+}
+
+.pho-ds-selected,
+.pho-ds-selected:hover {
+  background: #3451d1;
+  color: #fff;
+}
+
+.pho-ds-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pho-ds-link {
+  flex: 1;
+  color: #3451d1;
+  font-weight: 600;
+}
+
+.pho-ds-button {
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid #c9cde0;
+  border-radius: 8px;
+  background: #fff;
+  color: #1c2150;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pho-ds-primary {
+  border-color: #3451d1;
+  background: #3451d1;
+  color: #fff;
+}
+
+.pho-ds-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

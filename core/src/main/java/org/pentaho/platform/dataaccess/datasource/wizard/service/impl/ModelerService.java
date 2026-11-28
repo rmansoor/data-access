@@ -26,9 +26,8 @@ import org.pentaho.agilebi.modeler.IModelerSource;
 import org.pentaho.agilebi.modeler.ModelerMessagesHolder;
 import org.pentaho.agilebi.modeler.ModelerPerspective;
 import org.pentaho.agilebi.modeler.ModelerWorkspace;
-import org.pentaho.agilebi.modeler.gwt.BogoPojo;
-import org.pentaho.agilebi.modeler.gwt.GwtModelerWorkspaceHelper;
-import org.pentaho.agilebi.modeler.services.IModelerService;
+import org.pentaho.platform.dataaccess.datasource.modeler.ServerModelerWorkspaceHelper;
+import org.pentaho.platform.dataaccess.datasource.modeler.IModelerService;
 import org.pentaho.agilebi.modeler.util.SpoonModelerMessages;
 import org.pentaho.agilebi.modeler.util.TableModelerSource;
 import org.pentaho.di.core.Props;
@@ -159,10 +158,6 @@ public class ModelerService extends PentahoBase implements IModelerService {
     }
   }
 
-  public BogoPojo gwtWorkaround( BogoPojo pojo ) {
-    return new BogoPojo();
-  }
-
   public String serializeModels( final Domain domain, final String name ) throws Exception {
     return serializeModels( domain, name, true );
   }
@@ -182,7 +177,7 @@ public class ModelerService extends PentahoBase implements IModelerService {
               datasourceService = new DSWDatasourceServiceImpl();
             }
 
-            ModelerWorkspace model = new ModelerWorkspace( new GwtModelerWorkspaceHelper(), datasourceService
+            ModelerWorkspace model = new ModelerWorkspace( new ServerModelerWorkspaceHelper(), datasourceService
               .getGeoContext() );
             model.setModelName( name );
             model.setDomain( domain );

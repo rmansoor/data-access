@@ -25,8 +25,8 @@ import jakarta.ws.rs.core.MediaType;
 
 import org.junit.Test;
 import org.pentaho.database.model.DatabaseType;
-import org.pentaho.ui.database.event.DefaultDatabaseTypesList;
-import org.pentaho.ui.database.event.IDatabaseTypesList;
+import org.pentaho.platform.dataaccess.datasource.connection.DefaultDatabaseTypesList;
+import org.pentaho.platform.dataaccess.datasource.connection.IDatabaseTypesList;
 
 /**
  * BACKLOG-50609 regression coverage for {@link DatabaseTypesListReaderWriter} (root cause: the

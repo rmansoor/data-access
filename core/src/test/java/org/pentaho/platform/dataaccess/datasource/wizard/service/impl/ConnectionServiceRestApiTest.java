@@ -21,7 +21,7 @@ import org.pentaho.platform.dataaccess.datasource.wizard.service.model.LevelAwar
 import org.pentaho.platform.dataaccess.datasource.wizard.service.model.LevelAwareDatabaseConnectionList;
 import org.pentaho.platform.engine.security.authorization.core.exceptions.AuthorizationRuleException;
 import org.pentaho.platform.dataaccess.datasource.wizard.service.impl.utils.UtilHtmlSanitizer;
-import org.pentaho.ui.database.event.IDatabaseConnectionPoolParameterList;
+import org.pentaho.platform.dataaccess.datasource.connection.IDatabaseConnectionPoolParameterList;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.ws.rs.WebApplicationException;
@@ -839,9 +839,9 @@ public class ConnectionServiceRestApiTest {
       org.mockito.Mockito.mock( org.pentaho.di.core.database.DatabaseMeta.class );
     when( mockMeta.checkParameters() ).thenReturn( new String[] {} );
 
-    try ( org.mockito.MockedStatic<org.pentaho.database.util.DatabaseUtil> utilities =
-      org.mockito.Mockito.mockStatic( org.pentaho.database.util.DatabaseUtil.class ) ) {
-      utilities.when( () -> org.pentaho.database.util.DatabaseUtil.convertToDatabaseMeta( testConn ) )
+    try ( org.mockito.MockedStatic<org.pentaho.platform.dataaccess.datasource.connection.DatabaseUtil> utilities =
+      org.mockito.Mockito.mockStatic( org.pentaho.platform.dataaccess.datasource.connection.DatabaseUtil.class ) ) {
+      utilities.when( () -> org.pentaho.platform.dataaccess.datasource.connection.DatabaseUtil.convertToDatabaseMeta( testConn ) )
         .thenReturn( mockMeta );
 
       try {
@@ -868,9 +868,9 @@ public class ConnectionServiceRestApiTest {
     String[] validationMessages = { "Bad Connection Name" };
     when( mockMeta.checkParameters() ).thenReturn( validationMessages );
 
-    try ( org.mockito.MockedStatic<org.pentaho.database.util.DatabaseUtil> utilities =
-      org.mockito.Mockito.mockStatic( org.pentaho.database.util.DatabaseUtil.class ) ) {
-      utilities.when( () -> org.pentaho.database.util.DatabaseUtil.convertToDatabaseMeta( testConn ) )
+    try ( org.mockito.MockedStatic<org.pentaho.platform.dataaccess.datasource.connection.DatabaseUtil> utilities =
+      org.mockito.Mockito.mockStatic( org.pentaho.platform.dataaccess.datasource.connection.DatabaseUtil.class ) ) {
+      utilities.when( () -> org.pentaho.platform.dataaccess.datasource.connection.DatabaseUtil.convertToDatabaseMeta( testConn ) )
         .thenReturn( mockMeta );
 
       try {
@@ -908,9 +908,9 @@ public class ConnectionServiceRestApiTest {
     String[] validationMessages = { "Bad Database Name" };
     when( mockMeta.checkParameters() ).thenReturn( validationMessages );
 
-    try ( org.mockito.MockedStatic<org.pentaho.database.util.DatabaseUtil> utilities =
-      org.mockito.Mockito.mockStatic( org.pentaho.database.util.DatabaseUtil.class ) ) {
-      utilities.when( () -> org.pentaho.database.util.DatabaseUtil.convertToDatabaseMeta( testConn ) )
+    try ( org.mockito.MockedStatic<org.pentaho.platform.dataaccess.datasource.connection.DatabaseUtil> utilities =
+      org.mockito.Mockito.mockStatic( org.pentaho.platform.dataaccess.datasource.connection.DatabaseUtil.class ) ) {
+      utilities.when( () -> org.pentaho.platform.dataaccess.datasource.connection.DatabaseUtil.convertToDatabaseMeta( testConn ) )
         .thenReturn( mockMeta );
 
       try {
@@ -947,9 +947,9 @@ public class ConnectionServiceRestApiTest {
       org.mockito.Mockito.mock( org.pentaho.di.core.database.DatabaseMeta.class );
     when( mockMeta.checkParameters() ).thenReturn( new String[] {} );
 
-    try ( org.mockito.MockedStatic<org.pentaho.database.util.DatabaseUtil> utilities =
-      org.mockito.Mockito.mockStatic( org.pentaho.database.util.DatabaseUtil.class ) ) {
-      utilities.when( () -> org.pentaho.database.util.DatabaseUtil.convertToDatabaseMeta( testConn ) )
+    try ( org.mockito.MockedStatic<org.pentaho.platform.dataaccess.datasource.connection.DatabaseUtil> utilities =
+      org.mockito.Mockito.mockStatic( org.pentaho.platform.dataaccess.datasource.connection.DatabaseUtil.class ) ) {
+      utilities.when( () -> org.pentaho.platform.dataaccess.datasource.connection.DatabaseUtil.convertToDatabaseMeta( testConn ) )
         .thenReturn( mockMeta );
 
       try {
@@ -976,9 +976,9 @@ public class ConnectionServiceRestApiTest {
     String[] validationMessages = { "Bad Interface" };
     when( mockMeta.checkParameters() ).thenReturn( validationMessages );
 
-    try ( org.mockito.MockedStatic<org.pentaho.database.util.DatabaseUtil> utilities =
-      org.mockito.Mockito.mockStatic( org.pentaho.database.util.DatabaseUtil.class ) ) {
-      utilities.when( () -> org.pentaho.database.util.DatabaseUtil.convertToDatabaseMeta( testConn ) )
+    try ( org.mockito.MockedStatic<org.pentaho.platform.dataaccess.datasource.connection.DatabaseUtil> utilities =
+      org.mockito.Mockito.mockStatic( org.pentaho.platform.dataaccess.datasource.connection.DatabaseUtil.class ) ) {
+      utilities.when( () -> org.pentaho.platform.dataaccess.datasource.connection.DatabaseUtil.convertToDatabaseMeta( testConn ) )
         .thenReturn( mockMeta );
 
       try {

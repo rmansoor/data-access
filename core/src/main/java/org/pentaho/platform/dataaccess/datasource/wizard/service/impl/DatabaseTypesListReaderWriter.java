@@ -15,8 +15,8 @@
 package org.pentaho.platform.dataaccess.datasource.wizard.service.impl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.pentaho.ui.database.event.DefaultDatabaseTypesList;
-import org.pentaho.ui.database.event.IDatabaseTypesList;
+import org.pentaho.platform.dataaccess.datasource.connection.DefaultDatabaseTypesList;
+import org.pentaho.platform.dataaccess.datasource.connection.IDatabaseTypesList;
 
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.WebApplicationException;

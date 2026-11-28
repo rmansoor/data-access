@@ -30,7 +30,7 @@ import org.pentaho.agilebi.modeler.ModelerWorkspace;
 import org.pentaho.agilebi.modeler.geo.GeoContext;
 import org.pentaho.agilebi.modeler.geo.GeoContextFactory;
 import org.pentaho.agilebi.modeler.geo.GeoContextPropertiesProvider;
-import org.pentaho.agilebi.modeler.gwt.GwtModelerWorkspaceHelper;
+import org.pentaho.platform.dataaccess.datasource.modeler.ServerModelerWorkspaceHelper;
 import org.pentaho.agilebi.modeler.models.JoinFieldModel;
 import org.pentaho.agilebi.modeler.models.JoinRelationshipModel;
 import org.pentaho.agilebi.modeler.models.JoinTableModel;
@@ -49,14 +49,13 @@ import org.pentaho.metadata.util.SQLModelGenerator;
 import org.pentaho.metadata.util.SQLModelGeneratorException;
 import org.pentaho.metadata.util.SerializationService;
 import org.pentaho.platform.dataaccess.datasource.DatasourceType;
-import org.pentaho.platform.dataaccess.datasource.beans.BogoPojo;
 import org.pentaho.platform.dataaccess.datasource.beans.BusinessData;
 import org.pentaho.platform.dataaccess.datasource.beans.LogicalModelSummary;
 import org.pentaho.platform.dataaccess.datasource.beans.SerializedResultSet;
 import org.pentaho.platform.dataaccess.datasource.wizard.models.DatasourceDTO;
 import org.pentaho.platform.dataaccess.datasource.wizard.service.DatasourceServiceException;
 import org.pentaho.platform.dataaccess.datasource.wizard.service.QueryValidationException;
-import org.pentaho.platform.dataaccess.datasource.wizard.service.gwt.IDSWDatasourceService;
+import org.pentaho.platform.dataaccess.datasource.wizard.service.IDSWDatasourceService;
 import org.pentaho.platform.dataaccess.datasource.wizard.service.impl.utils.DatasourceInMemoryServiceHelper;
 import org.pentaho.platform.dataaccess.datasource.wizard.service.messages.Messages;
 import org.pentaho.platform.dataaccess.datasource.wizard.sources.query.QueryDatasourceSummary;
@@ -314,10 +313,6 @@ public class InMemoryDSWDatasourceServiceImpl implements IDSWDatasourceService {
     return logicalModelSummaries;
   }
 
-  public BogoPojo gwtWorkaround( BogoPojo pojo ) {
-    return pojo;
-  }
-
   public String serializeModelState( DatasourceDTO dto ) throws DatasourceServiceException {
     XStream xs = SerializationService.createXStreamWithAllowedTypes( null, null );
     return xs.toXML( dto );
@@ -343,7 +338,7 @@ public class InMemoryDSWDatasourceServiceImpl implements IDSWDatasourceService {
   public QueryDatasourceSummary generateQueryDomain( String name, String query, DatabaseConnection connection,
                                                      DatasourceDTO datasourceDTO ) throws DatasourceServiceException {
 
-    ModelerWorkspace modelerWorkspace = new ModelerWorkspace( new GwtModelerWorkspaceHelper(), getGeoContext() );
+    ModelerWorkspace modelerWorkspace = new ModelerWorkspace( new ServerModelerWorkspaceHelper(), getGeoContext() );
     ModelerService modelerService = new ModelerService();
     modelerWorkspace.setModelName( name );
 

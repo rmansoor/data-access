@@ -16,7 +16,7 @@ package org.pentaho.platform.dataaccess.datasource.wizard.service;
 
 import java.io.Serializable;
 
-import com.google.gwt.http.client.Response;
+import jakarta.servlet.http.HttpServletResponse;
 
 public class ConnectionServiceException extends Exception implements Serializable {
 
@@ -26,22 +26,22 @@ public class ConnectionServiceException extends Exception implements Serializabl
 
   public ConnectionServiceException() {
     super();
-    this.statusCode = Response.SC_INTERNAL_SERVER_ERROR;
+    this.statusCode = HttpServletResponse.SC_INTERNAL_SERVER_ERROR;
   }
 
   public ConnectionServiceException( String message ) {
     super( message );
-    this.statusCode = Response.SC_INTERNAL_SERVER_ERROR;
+    this.statusCode = HttpServletResponse.SC_INTERNAL_SERVER_ERROR;
   }
 
   public ConnectionServiceException( Throwable cause ) {
     super( cause );
-    this.statusCode = Response.SC_INTERNAL_SERVER_ERROR;
+    this.statusCode = HttpServletResponse.SC_INTERNAL_SERVER_ERROR;
   }
 
   public ConnectionServiceException( String message, Throwable cause ) {
     super( message, cause );
-    this.statusCode = Response.SC_INTERNAL_SERVER_ERROR;
+    this.statusCode = HttpServletResponse.SC_INTERNAL_SERVER_ERROR;
   }
 
   public ConnectionServiceException( int statusCode, String message, Throwable cause ) {

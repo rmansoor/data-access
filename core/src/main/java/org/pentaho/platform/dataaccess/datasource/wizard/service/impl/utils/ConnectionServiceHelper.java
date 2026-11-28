@@ -13,7 +13,6 @@
 
 package org.pentaho.platform.dataaccess.datasource.wizard.service.impl.utils;
 
-import com.google.gwt.thirdparty.guava.common.annotations.VisibleForTesting;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.pentaho.database.model.IDatabaseConnection;
@@ -26,7 +25,7 @@ import org.pentaho.platform.engine.core.system.PentahoSystem;
 
 public class ConnectionServiceHelper {
   private static final Log logger = LogFactory.getLog( ConnectionServiceHelper.class );
-  @VisibleForTesting
+  /* visible for testing */
   protected static IDatasourceMgmtService datasourceMgmtSvc;
   private static char PASSWORD_REPLACE_CHAR = '*';
 

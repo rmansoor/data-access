@@ -20,6 +20,9 @@ import org.junit.Test;
 import org.pentaho.platform.api.engine.PentahoAccessControlException;
 import org.pentaho.platform.api.repository2.unified.webservices.RepositoryFileAclDto;
 import org.pentaho.platform.dataaccess.datasource.api.DataSourceWizardService;
+import org.pentaho.platform.dataaccess.datasource.beans.LogicalModelSummary;
+import org.pentaho.platform.dataaccess.datasource.wizard.service.DatasourceServiceException;
+import org.pentaho.platform.dataaccess.datasource.wizard.service.impl.DSWDatasourceServiceImpl;
 import org.pentaho.platform.web.http.api.resources.JaxbList;
 
 import jakarta.ws.rs.WebApplicationException;
@@ -257,5 +260,33 @@ public class DataSourceWizardResourceTest {
 
     response = dataSourceWizardResource.doSetDSWAcl( domainId, null );
     assertEquals( Response.Status.CONFLICT.getStatusCode(), response.getStatus() );
+  }
+
+  @Test
+  public void listsTheModelsVisibleInAContextAsJsonByName() throws Exception {
+    DSWDatasourceServiceImpl dsw = mock( DSWDatasourceServiceImpl.class );
+    doReturn( dsw ).when( dataSourceWizardResource ).createDswDatasourceService();
+    doReturn( List.of( new LogicalModelSummary( "sales.xmi", "BV_SALES", "sales" ),
+      new LogicalModelSummary( "orders.xmi", "BV_ORDERS", "Orders" ) ) ).when( dsw ).getLogicalModels( "reporting" );
+
+    Response response = dataSourceWizardResource.getLogicalModels( "reporting" );
+    assertEquals( 200, response.getStatus() );
+    assertEquals( "[{\"domainId\":\"orders.xmi\",\"modelId\":\"BV_ORDERS\",\"modelName\":\"Orders\"},"
+      + "{\"domainId\":\"sales.xmi\",\"modelId\":\"BV_SALES\",\"modelName\":\"sales\"}]", response.getEntity() );
+
+    doThrow( new DatasourceServiceException( "denied" ) ).when( dsw ).getLogicalModels( "" );
+    assertEquals( 401, dataSourceWizardResource.getLogicalModels( null ).getStatus() );
+  }
+
+  @Test
+  public void deletesOneLogicalModel() throws Exception {
+    DSWDatasourceServiceImpl dsw = mock( DSWDatasourceServiceImpl.class );
+    doReturn( dsw ).when( dataSourceWizardResource ).createDswDatasourceService();
+    doReturn( true ).when( dsw ).deleteLogicalModel( "orders.xmi", "Orders" );
+
+    assertEquals( 204, dataSourceWizardResource.deleteLogicalModel( "orders.xmi", "Orders" ).getStatus() );
+    assertEquals( 404, dataSourceWizardResource.deleteLogicalModel( "orders.xmi", "Gone" ).getStatus() );
+    assertEquals( 400, dataSourceWizardResource.deleteLogicalModel( "orders.xmi", "" ).getStatus() );
+    assertEquals( 400, dataSourceWizardResource.deleteLogicalModel( null, "Orders" ).getStatus() );
   }
 }

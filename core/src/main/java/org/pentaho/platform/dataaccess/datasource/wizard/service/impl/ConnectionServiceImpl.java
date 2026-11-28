@@ -37,7 +37,7 @@ import org.pentaho.platform.api.repository.datasource.DuplicateDatasourceExcepti
 import org.pentaho.platform.api.repository.datasource.IDatasourceMgmtService;
 import org.pentaho.platform.api.repository.datasource.NonExistingDatasourceException;
 import org.pentaho.platform.dataaccess.datasource.wizard.service.ConnectionServiceException;
-import org.pentaho.platform.dataaccess.datasource.wizard.service.gwt.IConnectionService;
+import org.pentaho.platform.dataaccess.datasource.wizard.service.IConnectionService;
 import org.pentaho.platform.dataaccess.datasource.wizard.service.impl.utils.ConnectionServiceHelper;
 import org.pentaho.platform.dataaccess.datasource.wizard.service.impl.utils.UtilHtmlSanitizer;
 import org.pentaho.platform.dataaccess.datasource.wizard.service.messages.Messages;
@@ -48,7 +48,7 @@ import org.pentaho.platform.engine.security.authorization.core.exceptions.Author
 import org.pentaho.platform.engine.services.connection.PentahoConnectionFactory;
 import org.pentaho.platform.plugin.services.connections.sql.SQLConnection;
 
-import com.google.gwt.http.client.Response;
+import jakarta.servlet.http.HttpServletResponse;
 
 /**
  * ConnectionServiceImpl extends PenahoBase so that it inherits the ILogger functionality.
@@ -110,12 +110,12 @@ public class ConnectionServiceImpl extends PentahoBase implements IConnectionSer
       if ( !hasDataAccessPermission() ) {
         String message = Messages.getErrorString( "ConnectionServiceImpl.ERROR_0001_PERMISSION_DENIED" ); //$NON-NLS-1$
         logger.error( message );
-        throw new ConnectionServiceException( Response.SC_FORBIDDEN, message ); //$NON-NLS-1$
+        throw new ConnectionServiceException( HttpServletResponse.SC_FORBIDDEN, message ); //$NON-NLS-1$
       }
     } catch ( AuthorizationRuleException ex ) {
         String message = Messages.getErrorString( "ConnectionServiceImpl.ERROR_0001_PERMISSION_DENIED" ); //$NON-NLS-1$
         logger.error( message );
-        throw new ConnectionServiceException( Response.SC_FORBIDDEN, message ); //$NON-NLS-1$
+        throw new ConnectionServiceException( HttpServletResponse.SC_FORBIDDEN, message ); //$NON-NLS-1$
     }
   }
 
@@ -155,7 +155,7 @@ public class ConnectionServiceImpl extends PentahoBase implements IConnectionSer
     try {
       IDatabaseConnection connection = datasourceMgmtSvc.getDatasourceByName( sanitizer.safeEscapeHtml( name ) );
       if ( connection == null ) {
-        throw new ConnectionServiceException( Response.SC_NOT_FOUND, Messages.getErrorString(
+        throw new ConnectionServiceException( HttpServletResponse.SC_NOT_FOUND, Messages.getErrorString(
           "ConnectionServiceImpl.ERROR_0003_UNABLE_TO_GET_CONNECTION", name ) ); //$NON-NLS-1$
       } else {
         if ( doUnsanitize ) {
@@ -179,7 +179,7 @@ public class ConnectionServiceImpl extends PentahoBase implements IConnectionSer
     try {
       IDatabaseConnection connection = datasourceMgmtSvc.getDatasourceById( id );
       if ( connection == null ) {
-        throw new ConnectionServiceException( Response.SC_NOT_FOUND, Messages.getErrorString(
+        throw new ConnectionServiceException( HttpServletResponse.SC_NOT_FOUND, Messages.getErrorString(
           "ConnectionServiceImpl.ERROR_0003_UNABLE_TO_GET_CONNECTION", id ) ); //$NON-NLS-1$
       } else {
         return connection;
@@ -217,7 +217,7 @@ public class ConnectionServiceImpl extends PentahoBase implements IConnectionSer
         duplicateDatasourceException.getLocalizedMessage()
       );
       logger.error( message );
-      throw new ConnectionServiceException( Response.SC_CONFLICT, message, duplicateDatasourceException );
+      throw new ConnectionServiceException( HttpServletResponse.SC_CONFLICT, message, duplicateDatasourceException );
     } catch ( Exception e ) {
       String message = Messages.getErrorString(
         "ConnectionServiceImpl.ERROR_0004_UNABLE_TO_ADD_CONNECTION", //$NON-NLS-1$
@@ -247,7 +247,7 @@ public class ConnectionServiceImpl extends PentahoBase implements IConnectionSer
         connection.getName(),
         nonExistingDatasourceException.getLocalizedMessage()
       );
-      throw new ConnectionServiceException( Response.SC_NOT_FOUND, message, nonExistingDatasourceException );
+      throw new ConnectionServiceException( HttpServletResponse.SC_NOT_FOUND, message, nonExistingDatasourceException );
     } catch ( Exception e ) {
       String message = Messages.getErrorString(
         "ConnectionServiceImpl.ERROR_0005_UNABLE_TO_UPDATE_CONNECTION", //$NON-NLS-1$
@@ -269,7 +269,7 @@ public class ConnectionServiceImpl extends PentahoBase implements IConnectionSer
     } catch ( NonExistingDatasourceException nonExistingDatasourceException ) {
       String message = Messages.getErrorString( "ConnectionServiceImpl.ERROR_0006_UNABLE_TO_DELETE_CONNECTION", //$NON-NLS-1$
         connection.getName(), nonExistingDatasourceException.getLocalizedMessage() );
-      throw new ConnectionServiceException( Response.SC_NOT_FOUND, message, nonExistingDatasourceException );
+      throw new ConnectionServiceException( HttpServletResponse.SC_NOT_FOUND, message, nonExistingDatasourceException );
     } catch ( Exception e ) {
       String message = Messages.getErrorString( "ConnectionServiceImpl.ERROR_0006_UNABLE_TO_DELETE_CONNECTION", //$NON-NLS-1$
         connection.getName(), e.getLocalizedMessage() );
@@ -289,7 +289,7 @@ public class ConnectionServiceImpl extends PentahoBase implements IConnectionSer
       String message = Messages.getErrorString( "ConnectionServiceImpl.ERROR_0006_UNABLE_TO_DELETE_CONNECTION", //$NON-NLS-1$
         name, nonExistingDatasourceException.getLocalizedMessage()
       );
-      throw new ConnectionServiceException( Response.SC_NOT_FOUND, message, nonExistingDatasourceException );
+      throw new ConnectionServiceException( HttpServletResponse.SC_NOT_FOUND, message, nonExistingDatasourceException );
     } catch ( Exception e ) {
       String message = Messages.getErrorString( "ConnectionServiceImpl.ERROR_0006_UNABLE_TO_DELETE_CONNECTION", //$NON-NLS-1$
         name, e.getLocalizedMessage()
@@ -355,7 +355,7 @@ public class ConnectionServiceImpl extends PentahoBase implements IConnectionSer
     } else {
       String message = Messages.getErrorString( "ConnectionServiceImpl.ERROR_0008_UNABLE_TO_TEST_NULL_CONNECTION" ); //$NON-NLS-1$
       logger.error( message );
-      throw new ConnectionServiceException( Response.SC_BAD_REQUEST, message ); //$NON-NLS-1$
+      throw new ConnectionServiceException( HttpServletResponse.SC_BAD_REQUEST, message ); //$NON-NLS-1$
     }
   }
 
