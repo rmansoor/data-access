@@ -42,6 +42,8 @@
 
   <!-- Datasets REST API v2 (/plugin/data-access/api/v2/datasets): definitions kept in /etc/datasets. -->
   <bean id="datasetServiceFactory" class="org.pentaho.platform.dataaccess.dataset.service.PlatformDatasetServiceFactory"/>
+  <!-- A dataset's scheduled reload (DatasetSchedules.ACTION_ID); the scheduler creates one per run. -->
+  <bean id="datasetRefreshAction" class="org.pentaho.platform.dataaccess.dataset.service.DatasetRefreshAction" scope="prototype"/>
   <bean class="org.pentaho.platform.dataaccess.dataset.api.DatasetsResource">
     <constructor-arg ref="datasetServiceFactory"/>
   </bean>

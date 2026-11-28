@@ -52,6 +52,16 @@
         "headerRow": { "type": "boolean" },
         "sheet": { "type": "string", "description": "XLSX: the sheet to read; the first when not set" },
         "startRow": { "type": "integer", "minimum": 1, "description": "XLSX: the row the table starts at, from 1" },
+        "appended": {
+          "type": "array",
+          "description": "Files appended after this one, loaded after it in order; set by the server",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path"],
+            "properties": { "path": { "type": "string" }, "originalName": { "type": "string" } }
+          }
+        },
         "stagingTable": { "type": "string" },
         "stagedColumns": {
           "type": "array",

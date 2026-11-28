@@ -38,6 +38,7 @@ import org.pentaho.platform.dataaccess.dataset.DatasetJson;
 import org.pentaho.platform.dataaccess.dataset.DatasetProblem;
 import org.pentaho.platform.dataaccess.dataset.service.DatasetApiException;
 import org.pentaho.platform.dataaccess.dataset.service.DatasetApiException.Code;
+import org.pentaho.platform.dataaccess.dataset.service.DatasetRefresh;
 import org.pentaho.platform.dataaccess.dataset.service.DatasetService;
 import org.pentaho.platform.dataaccess.dataset.service.DatasetShare;
 import org.pentaho.platform.dataaccess.dataset.service.StoredDataset;
@@ -212,6 +213,83 @@ public class DatasetsResource {
     return handle( () -> {
       DatasetService s = service.get();
       return definition( Response.ok(), s.uploadFile( id, expected( s, id, ifMatch ), name, body ) );
+    } );
+  }
+
+  /**
+   * Refreshes a file dataset with a new file (the request body), in the background: {@code mode=replace}
+   * loads it instead of the dataset's files, {@code mode=append} after them. Requires If-Match with the
+   * version last read. 422 with every difference when its columns don't match the dataset's. Answers
+   * 202 with the job (follow it at GET .../stage); a value that doesn't fit fails the job and leaves
+   * the dataset as it was. Each refresh is recorded at GET .../refreshes.
+   */
+  @POST
+  @Path( "{id}/files" )
+  @Consumes( MediaType.WILDCARD )
+  public Response refreshWithFile( @PathParam( "id" ) String id, @HeaderParam( HttpHeaders.IF_MATCH ) String ifMatch,
+                                   @QueryParam( "mode" ) String mode, @QueryParam( "name" ) String name, InputStream body ) {
+    return handle( () -> {
+      DatasetService s = service.get();
+      DatasetRefresh.Mode m;
+      try {
+        m = DatasetRefresh.Mode.valueOf( mode == null ? "" : mode.trim().toUpperCase( java.util.Locale.ROOT ) );
+      } catch ( IllegalArgumentException e ) {
+        throw new DatasetApiException( Code.INVALID_REQUEST, "mode", "mode must be replace or append", null, e );
+      }
+      return Response.accepted( mapper.writeValueAsString( s.startRefresh( id, expected( s, id, ifMatch ), m, name, body ) ) )
+        .type( MediaType.APPLICATION_JSON ).build();
+    } );
+  }
+
+  /** The dataset's scheduled reload: {@code {cron, timeZone, jobId, state, owner, nextRun, lastRun}}; 404 when it has none. */
+  @GET
+  @Path( "{id}/schedule" )
+  public Response schedule( @PathParam( "id" ) String id ) {
+    return handle( () -> {
+      java.util.Optional<org.pentaho.platform.dataaccess.dataset.service.DatasetSchedule> s = service.get().schedule( id );
+      if ( s.isEmpty() ) {
+        throw new DatasetApiException( Code.NOT_FOUND, "", "The dataset isn't scheduled", null, null );
+      }
+      return Response.ok( mapper.writeValueAsString( s.get() ) ).type( MediaType.APPLICATION_JSON ).build();
+    } );
+  }
+
+  /** Schedules the file dataset's reload, replacing its schedule: body {@code {cron, timeZone}}. */
+  @PUT
+  @Path( "{id}/schedule" )
+  @Consumes( MediaType.APPLICATION_JSON )
+  public Response setSchedule( @PathParam( "id" ) String id, String body ) {
+    return handle( () -> {
+      org.pentaho.platform.dataaccess.dataset.service.DatasetSchedule s;
+      try {
+        s = mapper.readValue( body, org.pentaho.platform.dataaccess.dataset.service.DatasetSchedule.class );
+      } catch ( java.io.IOException e ) {
+        throw new DatasetApiException( Code.INVALID_REQUEST, "", "The body isn't a schedule: " + e.getMessage(), null, e );
+      }
+      return Response.ok( mapper.writeValueAsString( service.get().setSchedule( id, s ) ) ).type( MediaType.APPLICATION_JSON ).build();
+    } );
+  }
+
+  /** Stops the dataset's scheduled reloads. */
+  @DELETE
+  @Path( "{id}/schedule" )
+  public Response removeSchedule( @PathParam( "id" ) String id ) {
+    return handle( () -> {
+      service.get().removeSchedule( id );
+      return Response.noContent().build();
+    } );
+  }
+
+  /**
+   * The dataset's loads, newest first (up to 100): {@code {"refreshes": [{id, mode, trigger, user, file,
+   * started, finished, state, rows, error, warnings, republished}]}}.
+   */
+  @GET
+  @Path( "{id}/refreshes" )
+  public Response refreshes( @PathParam( "id" ) String id ) {
+    return handle( () -> {
+      java.util.Map<String, Object> body = java.util.Map.of( "refreshes", service.get().refreshes( id ) );
+      return Response.ok( mapper.writeValueAsString( body ) ).type( MediaType.APPLICATION_JSON ).build();
     } );
   }
 

@@ -20,7 +20,7 @@ import java.util.List;
 
 /** An uploaded file loaded into a table of its own on the staging connection. */
 @JsonInclude( JsonInclude.Include.NON_NULL )
-@JsonPropertyOrder( { "connection", "table", "rows", "columns", "warnings" } )
+@JsonPropertyOrder( { "connection", "table", "rows", "rejected", "columns", "warnings" } )
 public final class StagedTable {
 
   private final String connection;
@@ -28,13 +28,25 @@ public final class StagedTable {
   private final long rows;
   private final List<Column> columns;
   private final List<String> warnings;
+  private final long rejected;
 
   public StagedTable( String connection, String table, long rows, List<Column> columns, List<String> warnings ) {
+    this( connection, table, rows, columns, warnings, 0 );
+  }
+
+  /** @param rejected values that didn't fit their column's chosen type (loaded as empty) */
+  public StagedTable( String connection, String table, long rows, List<Column> columns, List<String> warnings, long rejected ) {
     this.connection = connection;
     this.table = table;
     this.rows = rows;
     this.columns = List.copyOf( columns );
     this.warnings = List.copyOf( warnings );
+    this.rejected = rejected;
+  }
+
+  /** Values that didn't fit the type the dataset gives their column; they were loaded as empty. */
+  public long getRejected() {
+    return rejected;
   }
 
   public String getConnection() {
