@@ -23,6 +23,10 @@ import org.apache.commons.logging.LogFactory;
 import org.pentaho.platform.dataaccess.dataset.DatasetDefinition.FileSource;
 import org.pentaho.platform.dataaccess.dataset.DatasetDefinition.Source;
 import org.pentaho.platform.dataaccess.dataset.DatasetDefinition.SourceType;
+import org.pentaho.platform.dataaccess.dataset.model.DatasetModelGenerator;
+import org.pentaho.platform.dataaccess.dataset.model.ModelPublisher;
+import org.pentaho.platform.dataaccess.dataset.model.PhysicalSource;
+import org.pentaho.platform.dataaccess.dataset.model.PublishedIds;
 import org.pentaho.platform.dataaccess.dataset.source.CsvStager;
 import org.pentaho.platform.dataaccess.dataset.source.DatasetFiles;
 import org.pentaho.platform.dataaccess.dataset.source.Sample;
@@ -66,6 +70,7 @@ public class DatasetService {
   private final SourceAdapters sources;
   private final DatasetValidator validator = new DatasetValidator();
   private final DatasetJson json = new DatasetJson();
+  private final DatasetModelGenerator generator = new DatasetModelGenerator();
 
   /** With sharing kept by this service instance only; for tests and single-user tools. */
   public DatasetService( DatasetStore store, DatasetPermissions permissions, Supplier<String> currentUser ) {
@@ -167,6 +172,110 @@ public class DatasetService {
     if ( sources.hasFiles() ) {
       sources.files().deleteAll( id );
     }
+    if ( PublishedIds.assigned( d ) && sources.canPublish() ) {
+      try {
+        sources.publisher().unpublish( PublishedIds.of( d ) );
+      } catch ( RuntimeException e ) {
+        LOG.warn( "Dataset " + id + " was deleted but what it published could not be removed", e );
+      }
+    }
+  }
+
+  // ------------------------------------------------------------------------------------------------
+  // Publishing
+
+  /** What publishing stored, and the dataset's version afterwards (new when the ids were fixed now). */
+  public static final class Published {
+    private final StoredDataset dataset;
+    private final PublishedIds ids;
+    private final boolean analysis;
+    private final List<String> warnings;
+
+    Published( StoredDataset dataset, PublishedIds ids, boolean analysis, List<String> warnings ) {
+      this.dataset = dataset;
+      this.ids = ids;
+      this.analysis = analysis;
+      this.warnings = warnings;
+    }
+
+    public StoredDataset getDataset() {
+      return dataset;
+    }
+
+    public PublishedIds getIds() {
+      return ids;
+    }
+
+    /** Whether a Mondrian catalog was published (the model has measures). */
+    public boolean isAnalysis() {
+      return analysis;
+    }
+
+    public List<String> getWarnings() {
+      return warnings;
+    }
+  }
+
+  /**
+   * Publishes the dataset for reporting: its metadata domain and, when its model has measures, its
+   * Mondrian catalog. The ids are fixed the first time (from the dataset's id and name, made unique
+   * against what the server has) and kept in the definition, so a republish replaces the same domain
+   * and catalog. A file must be loaded first.
+   */
+  public Published publish( String id, String expectedVersion ) {
+    requireManage();
+    requireValidId( id, "" );
+    requireVersion( expectedVersion );
+    StoredDataset current = writable( id );
+    if ( !current.getVersion().equals( expectedVersion ) ) {
+      throw new DatasetApiException( Code.STALE_VERSION, "The dataset changed since it was read; read it again before publishing" );
+    }
+    DatasetDefinition d = json.read( json.write( current.getDefinition() ) );
+    requireReadableSource( d );
+    ModelPublisher publisher = sources.publisher();
+    String connection = d.getSource().getConnection();
+    if ( connection == null || connection.trim().isEmpty() ) {
+      throw new DatasetApiException( Code.VALIDATION_FAILED, "source.connection",
+        d.getSource().getType() == SourceType.FILE ? "Load the file before publishing" : "The source has no connection", null, null );
+    }
+    PhysicalSource source = PhysicalSource.of( d, connection, publisher.dataSource( connection ) );
+    boolean fixedNow = !PublishedIds.assigned( d );
+    PublishedIds ids = fixedNow ? unique( PublishedIds.of( d ), publisher ) : PublishedIds.of( d );
+    DatasetModelGenerator.Generated g = generator.generate( d, source, ids );
+    publisher.publish( connection, g );
+    StoredDataset stored = current;
+    if ( fixedNow ) {
+      ids.keepIn( d );
+      stored = store.update( d, expectedVersion );
+    }
+    return new Published( stored, ids, g.getMondrianSchema() != null, g.getWarnings() );
+  }
+
+  /** The Agile BI modeler's suggestion for the dataset's model, from its kept columns; nothing is stored. */
+  public DatasetDefinition.Model suggestModel( String id ) {
+    requireManage();
+    requireValidId( id, "" );
+    DatasetDefinition d = readable( id ).getDefinition();
+    requireReadableSource( d );
+    String connection = d.getSource().getConnection();
+    if ( connection == null || connection.trim().isEmpty() ) {
+      throw new DatasetApiException( Code.VALIDATION_FAILED, "source.connection",
+        d.getSource().getType() == SourceType.FILE ? "Load the file first" : "The source has no connection", null, null );
+    }
+    return generator.suggest( d, PhysicalSource.of( d, connection, sources.publisher().dataSource( connection ) ) );
+  }
+
+  /** A first publish takes the dataset's id and name unless another data source has them; then "name (2)", and so on. */
+  private static PublishedIds unique( PublishedIds ids, ModelPublisher publisher ) {
+    String domain = ids.getDomainId();
+    for ( int n = 2; publisher.domainExists( domain ); n++ ) {
+      domain = ids.getDomainId().replaceFirst( "\\.xmi$", "" ) + "-" + n + ".xmi";
+    }
+    String catalog = ids.getCatalogName();
+    for ( int n = 2; publisher.catalogExists( catalog ); n++ ) {
+      catalog = ids.getCatalogName() + " (" + n + ")";
+    }
+    return new PublishedIds( domain, ids.getModelId(), catalog );
   }
 
   /**
@@ -448,6 +557,8 @@ public class DatasetService {
     StagedTable table = load.stager.stage( load.id, source, d.getColumns(), progress );
     source.setConnection( connection );
     source.getFile().setStagingTable( table.getTable() );
+    source.getFile().setStagedColumns( table.getColumns().stream()
+      .map( c -> new DatasetDefinition.StagedColumn( c.getSourceName(), c.getName() ) ).collect( Collectors.toList() ) );
     StoredDataset updated;
     try {
       updated = store.update( d, load.expectedVersion );
@@ -503,12 +614,14 @@ public class DatasetService {
   // ------------------------------------------------------------------------------------------------
 
   /**
-   * A FILE source's staging connection and table, and its uploaded file's name and original name,
-   * are the server's to set (by uploading and loading). From a client they are taken from the
-   * stored definition instead: a definition can't name a table for the server to drop, or another
+   * The ids a dataset was published with, a FILE source's staging connection, table and columns, and its
+   * uploaded file's name and original name are the server's to set (by publishing, uploading and loading).
+   * From a client they are taken from the stored definition instead: a definition can't name another data
+   * source's domain or catalog for a publish to replace, a table for the server to drop, or another
    * dataset's uploaded file to read. A file in the wizard's upload folders may still be named.
    */
   private static void keepServerFields( DatasetDefinition incoming, DatasetDefinition current ) {
+    incoming.setLegacy( current == null ? null : current.getLegacy() );
     Source in = incoming.getSource();
     if ( in == null || in.getType() != SourceType.FILE ) {
       return;
@@ -530,6 +643,7 @@ public class DatasetService {
     boolean sameFile = path != null && path.equals( stored );
     file.setOriginalName( sameFile ? wasFile.getOriginalName() : null );
     file.setStagingTable( wasFile == null ? null : wasFile.getStagingTable() );
+    file.setStagedColumns( wasFile == null ? null : wasFile.getStagedColumns() );
   }
 
   private void requireReadableSource( DatasetDefinition d ) {

@@ -69,6 +69,7 @@ public final class SourceAdapters {
       new SqlSourceAdapter( connections, SourceLimits.standard() ), csv ), stager, files );
     adapters.staging = staging;
     adapters.connections = connections;
+    adapters.publisher = new org.pentaho.platform.dataaccess.dataset.model.PlatformModelPublisher( connections );
     return adapters;
   }
 
@@ -136,6 +137,27 @@ public final class SourceAdapters {
     this.staging = staging;
     this.connections = connections;
     return this;
+  }
+
+  private org.pentaho.platform.dataaccess.dataset.model.ModelPublisher publisher;
+
+  /** Sets where published datasets go; for tests. */
+  public SourceAdapters withPublisher( org.pentaho.platform.dataaccess.dataset.model.ModelPublisher publisher ) {
+    this.publisher = publisher;
+    return this;
+  }
+
+  /** Where published datasets go: the metadata repository and Mondrian catalogs. */
+  public org.pentaho.platform.dataaccess.dataset.model.ModelPublisher publisher() {
+    if ( publisher == null ) {
+      throw new DatasetApiException( Code.NOT_IMPLEMENTED, "This server can't publish datasets" );
+    }
+    return publisher;
+  }
+
+  /** Whether datasets can be published, for removing what a deleted dataset published. */
+  public boolean canPublish() {
+    return publisher != null;
   }
 
   /** Loads running in the background; shared by every request this instance serves. */

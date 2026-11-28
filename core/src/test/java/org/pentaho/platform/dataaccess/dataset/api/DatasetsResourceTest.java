@@ -214,9 +214,11 @@ public class DatasetsResourceTest {
     java.io.InputStream body = new java.io.ByteArrayInputStream( "a\n1\n".getBytes( java.nio.charset.StandardCharsets.UTF_8 ) );
     assertEquals( "uploading needs the version", 428, resource.uploadFile( "monthly-orders", null, "a.csv", body ).getStatus() );
     assertEquals( 501, resource.uploadFile( "monthly-orders", "*", "a.csv", body ).getStatus() );
-    Response publish = resource.publish( "monthly-orders" );
+    assertEquals( "publishing needs the version", 428, resource.publish( "monthly-orders", null ).getStatus() );
+    Response publish = resource.publish( "monthly-orders", "*" );
     assertEquals( 501, publish.getStatus() );
-    assertTrue( body( publish ).get( "message" ).asText().contains( "CWBA-63" ) );
-    assertEquals( 404, resource.publish( "missing" ).getStatus() );
+    assertTrue( body( publish ).get( "message" ).asText().contains( "can't publish" ) );
+    assertEquals( 404, resource.publish( "missing", "*" ).getStatus() );
+    assertEquals( "a file must be loaded first", 422, resource.suggestModel( "monthly-orders" ).getStatus() );
   }
 }

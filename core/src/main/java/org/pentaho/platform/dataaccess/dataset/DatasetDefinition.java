@@ -206,7 +206,8 @@ public class DatasetDefinition {
 
   /** A file the dataset was loaded from, and how to read it. */
   @JsonInclude( JsonInclude.Include.NON_DEFAULT )
-  @JsonPropertyOrder( { "format", "path", "originalName", "encoding", "delimiter", "enclosure", "headerRow", "stagingTable" } )
+  @JsonPropertyOrder( { "format", "path", "originalName", "encoding", "delimiter", "enclosure", "headerRow", "stagingTable",
+    "stagedColumns" } )
   public static class FileSource {
     private FileFormat format;
     /** Repository or staging path of the uploaded file. */
@@ -217,8 +218,10 @@ public class DatasetDefinition {
     private String delimiter;
     private String enclosure;
     private boolean headerRow;
-    /** The table the file is staged into; set by the server. */
+    /** The table the file is staged into ({@code schema.table} when a staging schema is set); set by the server. */
     private String stagingTable;
+    /** The staging table's column for each of the file's columns, in file order; set by the server. */
+    private List<StagedColumn> stagedColumns = new ArrayList<>();
 
     public FileFormat getFormat() {
       return format;
@@ -282,6 +285,48 @@ public class DatasetDefinition {
 
     public void setStagingTable( String stagingTable ) {
       this.stagingTable = stagingTable;
+    }
+
+    public List<StagedColumn> getStagedColumns() {
+      return stagedColumns;
+    }
+
+    public void setStagedColumns( List<StagedColumn> stagedColumns ) {
+      this.stagedColumns = stagedColumns == null ? new ArrayList<>() : stagedColumns;
+    }
+  }
+
+  /** A column of the file and the staging table column it is loaded into. */
+  @JsonInclude( JsonInclude.Include.NON_NULL )
+  @JsonPropertyOrder( { "sourceName", "name" } )
+  public static class StagedColumn {
+    /** The column's name in the file. */
+    private String sourceName;
+    /** The staging table's column. */
+    private String name;
+
+    public StagedColumn() {
+    }
+
+    public StagedColumn( String sourceName, String name ) {
+      this.sourceName = sourceName;
+      this.name = name;
+    }
+
+    public String getSourceName() {
+      return sourceName;
+    }
+
+    public void setSourceName( String sourceName ) {
+      this.sourceName = sourceName;
+    }
+
+    public String getName() {
+      return name;
+    }
+
+    public void setName( String name ) {
+      this.name = name;
     }
   }
 

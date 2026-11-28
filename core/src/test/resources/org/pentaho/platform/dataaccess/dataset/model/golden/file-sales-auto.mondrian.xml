@@ -1,0 +1,47 @@
+<Schema name="Regional sales">
+  <Dimension name="month">
+    <Hierarchy hasAll="true">
+      <Table name="DS_REGIONAL_SALES_ABC"/>
+      <Level name="month" uniqueMembers="false" column="MONTH" type="Date">
+      </Level>
+    </Hierarchy>
+  </Dimension>
+  <Dimension name="note">
+    <Hierarchy hasAll="true">
+      <Table name="DS_REGIONAL_SALES_ABC"/>
+      <Level name="note" uniqueMembers="false" column="NOTE" type="String">
+      </Level>
+    </Hierarchy>
+  </Dimension>
+  <Dimension name="region">
+    <Hierarchy hasAll="true">
+      <Table name="DS_REGIONAL_SALES_ABC"/>
+      <Level name="region" uniqueMembers="false" column="REGION" type="String">
+      </Level>
+    </Hierarchy>
+  </Dimension>
+  <Dimension name="revenue">
+    <Hierarchy hasAll="true">
+      <Table name="DS_REGIONAL_SALES_ABC"/>
+      <Level name="revenue" uniqueMembers="false" column="REVENUE" type="Numeric">
+      </Level>
+    </Hierarchy>
+  </Dimension>
+  <Dimension name="units">
+    <Hierarchy hasAll="true">
+      <Table name="DS_REGIONAL_SALES_ABC"/>
+      <Level name="units" uniqueMembers="false" column="UNITS" type="Numeric">
+      </Level>
+    </Hierarchy>
+  </Dimension>
+  <Cube name="Regional sales">
+    <Table name="DS_REGIONAL_SALES_ABC"/>
+    <DimensionUsage name="month" source="month"/>
+    <DimensionUsage name="note" source="note"/>
+    <DimensionUsage name="region" source="region"/>
+    <DimensionUsage name="revenue" source="revenue"/>
+    <DimensionUsage name="units" source="units"/>
+    <Measure name="revenue" column="REVENUE" aggregator="sum"/>
+    <Measure name="units" column="UNITS" aggregator="sum"/>
+  </Cube>
+</Schema>

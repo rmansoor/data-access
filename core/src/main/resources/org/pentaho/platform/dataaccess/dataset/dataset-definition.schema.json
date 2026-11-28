@@ -50,7 +50,16 @@
         "delimiter": { "type": "string", "minLength": 1, "maxLength": 1 },
         "enclosure": { "type": "string", "maxLength": 1 },
         "headerRow": { "type": "boolean" },
-        "stagingTable": { "type": "string" }
+        "stagingTable": { "type": "string" },
+        "stagedColumns": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["sourceName", "name"],
+            "properties": { "sourceName": { "type": "string" }, "name": { "type": "string" } }
+          }
+        }
       }
     },
     "column": {
