@@ -310,6 +310,13 @@
 	    </pen:attributes>
   	</pen:publish>
   </bean>
+  <bean class="org.pentaho.platform.dataaccess.security.policy.rolebased.actions.DatasetCertifyAction">
+  	<pen:publish as-type="INTERFACES">
+	    <pen:attributes>
+	      <pen:attr key="priority" value="70"/>
+	    </pen:attributes>
+  	</pen:publish>
+  </bean>
 
   <bean id="dataAccessViewPermissionHandler" class="org.pentaho.platform.dataaccess.datasource.wizard.service.impl.SimpleDataAccessViewPermissionHandler">
   	<pen:publish as-type="INTERFACES" />

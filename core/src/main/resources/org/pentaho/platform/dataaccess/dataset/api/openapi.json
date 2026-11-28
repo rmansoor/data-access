@@ -375,6 +375,34 @@
         }
       }
     },
+    "/data-access/api/v2/datasets/{id}/certification": {
+      "parameters": [{ "$ref": "#/components/parameters/Id" }],
+      "put": {
+        "tags": ["Datasets"],
+        "operationId": "certifyDataset",
+        "summary": "Certify the dataset as trusted",
+        "description": "Records the caller, now and an optional note as the dataset's certification, replacing an earlier one. Needs the Certify Datasets permission (granted per role) and that the caller can see the dataset. No If-Match: authors don't edit it. Editing the dataset's source, columns, model, joins or row security withdraws it.",
+        "requestBody": { "required": false, "content": { "application/json": { "schema": { "type": "object", "properties": { "note": { "type": "string", "maxLength": 500 } } } } } },
+        "responses": {
+          "200": { "description": "Certified", "headers": { "ETag": { "$ref": "#/components/headers/ETag" } }, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DatasetDefinition" } } } },
+          "400": { "$ref": "#/components/responses/InvalidDefinition" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "422": { "$ref": "#/components/responses/ValidationFailed" }
+        }
+      },
+      "delete": {
+        "tags": ["Datasets"],
+        "operationId": "uncertifyDataset",
+        "summary": "Withdraw the dataset's certification",
+        "description": "Needs the Certify Datasets permission. Nothing changes when the dataset isn't certified.",
+        "responses": {
+          "200": { "description": "Not certified", "headers": { "ETag": { "$ref": "#/components/headers/ETag" } }, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DatasetDefinition" } } } },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
     "/data-access/api/v2/connections/{name}/tables": {
       "parameters": [{ "name": "name", "in": "path", "required": true, "description": "A database connection's name", "schema": { "type": "string" } }],
       "get": {
@@ -527,7 +555,8 @@
         "type": "object",
         "required": ["datasets"],
         "properties": {
-          "datasets": { "type": "array", "items": { "$ref": "#/components/schemas/DatasetSummary" } }
+          "canCertify": { "type": "boolean", "description": "Whether the caller may certify datasets" },
+          "datasets": { "type": "array", "description": "Certified first, then by name", "items": { "$ref": "#/components/schemas/DatasetSummary" } }
         }
       },
       "DatasetSummary": {
@@ -545,6 +574,21 @@
             "type": "object",
             "description": "Present once the dataset has been published: the names reports find it by",
             "properties": { "domainId": { "type": "string" }, "catalogName": { "type": "string" } }
+          },
+          "certification": {
+            "type": "object",
+            "description": "Present while the dataset is certified",
+            "properties": { "by": { "type": "string" }, "at": { "type": "string", "format": "date-time" }, "note": { "type": "string" } }
+          },
+          "warning": {
+            "type": "object",
+            "description": "Present while the dataset's latest load has failed, so its data is older than it should be; cleared by the next load that succeeds",
+            "properties": {
+              "kind": { "const": "REFRESH_FAILED" },
+              "at": { "type": "string", "format": "date-time" },
+              "trigger": { "type": "string", "enum": ["USER", "SCHEDULE"] },
+              "message": { "type": "string" }
+            }
           }
         }
       },

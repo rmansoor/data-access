@@ -28,4 +28,9 @@ public interface DatasetPermissions {
   default boolean canAdminister() {
     return false;
   }
+
+  /** May certify datasets and withdraw certifications (the "Certify Datasets" permission). */
+  default boolean canCertify() {
+    return false;
+  }
 }

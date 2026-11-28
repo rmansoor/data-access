@@ -222,4 +222,65 @@ public class DatasetsResourceTest {
     assertEquals( 404, resource.publish( "missing", "*" ).getStatus() );
     assertEquals( "a file must be loaded first", 422, resource.suggestModel( "monthly-orders" ).getStatus() );
   }
+
+  @Test
+  public void listsCertificationAndRefreshWarningsAndCertifiesByPermission() throws Exception {
+    InMemoryDatasetStore store = new InMemoryDatasetStore();
+    org.pentaho.platform.dataaccess.dataset.source.SourceAdapters sources = org.pentaho.platform.dataaccess.dataset.source.SourceAdapters.none();
+    boolean[] canCertify = { false };
+    DatasetPermissions permissions = new DatasetPermissions() {
+      @Override
+      public boolean canView() {
+        return true;
+      }
+
+      @Override
+      public boolean canManage() {
+        return true;
+      }
+
+      @Override
+      public boolean canCertify() {
+        return canCertify[0];
+      }
+    };
+    InMemoryDatasetSharing sharing = new InMemoryDatasetSharing( () -> "suzy", java.util.List::of );
+    DatasetService service = new DatasetService( store, permissions, () -> "suzy", sharing, sources );
+    DatasetsResource r = new DatasetsResource( () -> service );
+    r.create( CSV.replace( "Monthly orders", "Beta" ) );
+    r.create( CSV.replace( "Monthly orders", "Alpha" ) );
+
+    JsonNode list = body( r.list() );
+    assertFalse( list.get( "canCertify" ).asBoolean() );
+    assertEquals( 403, r.certify( "beta", "{\"note\":\"ok\"}" ).getStatus() );
+
+    canCertify[0] = true;
+    Response certified = r.certify( "beta", "{\"note\":\"Checked against the ledger\"}" );
+    assertEquals( 200, certified.getStatus() );
+    assertEquals( "Checked against the ledger", body( certified ).get( "certification" ).get( "note" ).asText() );
+    assertEquals( 200, r.certify( "alpha", "" ).getStatus() );
+    assertEquals( 400, r.certify( "alpha", "{nope" ).getStatus() );
+    assertEquals( 200, r.uncertify( "alpha" ).getStatus() );
+
+    org.pentaho.platform.dataaccess.dataset.service.DatasetRefresh failed = new org.pentaho.platform.dataaccess.dataset.service.DatasetRefresh();
+    failed.setState( org.pentaho.platform.dataaccess.dataset.service.DatasetRefresh.State.FAILED );
+    failed.setTrigger( org.pentaho.platform.dataaccess.dataset.service.DatasetRefresh.Trigger.SCHEDULE );
+    failed.setError( "The file is missing" );
+    failed.setFinished( "2026-11-28T09:00:00Z" );
+    sources.history().add( "alpha", failed );
+
+    list = body( r.list() );
+    assertTrue( list.get( "canCertify" ).asBoolean() );
+    JsonNode first = list.get( "datasets" ).get( 0 );
+    JsonNode second = list.get( "datasets" ).get( 1 );
+    assertEquals( "beta", first.get( "id" ).asText() );
+    assertEquals( "suzy", first.get( "certification" ).get( "by" ).asText() );
+    assertFalse( first.has( "warning" ) );
+    assertEquals( "alpha", second.get( "id" ).asText() );
+    assertFalse( second.has( "certification" ) );
+    assertEquals( "REFRESH_FAILED", second.get( "warning" ).get( "kind" ).asText() );
+    assertEquals( "SCHEDULE", second.get( "warning" ).get( "trigger" ).asText() );
+    assertEquals( "The file is missing", second.get( "warning" ).get( "message" ).asText() );
+    assertEquals( "2026-11-28T09:00:00Z", second.get( "warning" ).get( "at" ).asText() );
+  }
 }
