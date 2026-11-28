@@ -267,9 +267,36 @@
         "tags": ["Datasets"],
         "operationId": "publishDataset",
         "summary": "Publish the dataset for reports and analysis",
-        "description": "Not built yet: answers 501 until the generators (CWBA-63).",
+        "description": "Generates the metadata domain (XMI) for Interactive Reports and Report Designer and, when the model has measures, the Mondrian schema for Analyzer, the way the Data Source Wizard did, and stores them (replacing an earlier publish). A definition without a model gets the Agile BI modeler's suggestion. The domain id, model id and catalog name are fixed on the first publish (from the dataset's id and name, made unique against other data sources) and kept in `legacy`, so the version changes then; renaming the dataset later doesn't change them. A FILE source must be loaded first; a TABLES source must name one table. Republishing an unchanged definition writes identical files.",
+        "parameters": [{ "$ref": "#/components/parameters/IfMatch" }],
         "responses": {
+          "200": {
+            "description": "Published",
+            "headers": { "ETag": { "$ref": "#/components/headers/ETag" } },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Published" } } }
+          },
+          "403": { "$ref": "#/components/responses/Forbidden" },
           "404": { "$ref": "#/components/responses/NotFound" },
+          "412": { "$ref": "#/components/responses/StaleVersion" },
+          "422": { "$ref": "#/components/responses/ValidationFailed" },
+          "428": { "$ref": "#/components/responses/VersionRequired" },
+          "500": { "$ref": "#/components/responses/Internal" },
+          "501": { "$ref": "#/components/responses/NotImplemented" }
+        }
+      }
+    },
+    "/data-access/api/v2/datasets/{id}/model/suggestion": {
+      "parameters": [{ "$ref": "#/components/parameters/Id" }],
+      "get": {
+        "tags": ["Datasets"],
+        "operationId": "suggestDatasetModel",
+        "summary": "Suggest a model for the dataset",
+        "description": "The Agile BI modeler's suggestion for the kept columns, as the Data Source Wizard made it: every column a dimension, numeric columns also a summed measure. Same shape as `model` in the definition; nothing is stored. A FILE source must be loaded first.",
+        "responses": {
+          "200": { "description": "The suggested model", "content": { "application/json": { "schema": { "$ref": "dataset-definition.schema.json#/$defs/model" } } } },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "422": { "$ref": "#/components/responses/ValidationFailed" },
           "501": { "$ref": "#/components/responses/NotImplemented" }
         }
       }
@@ -381,6 +408,17 @@
     },
     "schemas": {
       "DatasetDefinition": { "$ref": "dataset-definition.schema.json" },
+      "Published": {
+        "type": "object",
+        "required": ["domainId", "modelId", "catalogName", "analysis", "warnings"],
+        "properties": {
+          "domainId": { "type": "string", "description": "The metadata domain, as Interactive Reports and Report Designer name it" },
+          "modelId": { "type": "string", "description": "The reporting model in the domain" },
+          "catalogName": { "type": "string", "description": "The Mondrian catalog, also the cube's name in Analyzer" },
+          "analysis": { "type": "boolean", "description": "Whether a Mondrian catalog was published (the model has measures)" },
+          "warnings": { "type": "array", "items": { "type": "string" }, "description": "What was published differently from the definition" }
+        }
+      },
       "DatasetList": {
         "type": "object",
         "required": ["datasets"],
@@ -398,7 +436,12 @@
           "owner": { "type": "string" },
           "sourceType": { "type": "string", "enum": ["TABLES", "SQL", "FILE"] },
           "version": { "type": "string", "description": "The same value as the dataset's ETag" },
-          "updated": { "type": "string", "format": "date-time" }
+          "updated": { "type": "string", "format": "date-time" },
+          "published": {
+            "type": "object",
+            "description": "Present once the dataset has been published: the names reports find it by",
+            "properties": { "domainId": { "type": "string" }, "catalogName": { "type": "string" } }
+          }
         }
       },
       "Sample": {

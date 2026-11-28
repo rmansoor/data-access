@@ -1,0 +1,36 @@
+<Schema name="Regional sales">
+  <Dimension name="Region">
+    <Hierarchy hasAll="true">
+    <View alias="FACT">
+        <SQL dialect="generic">
+         <![CDATA[SELECT TERRITORY AS region, ORDERDATE AS month, QUANTITYORDERED AS units, TOTALPRICE AS revenue FROM ORDERFACT]]>
+        </SQL>
+    </View>
+      <Level name="region" uniqueMembers="false" column="region" type="String">
+      </Level>
+    </Hierarchy>
+  </Dimension>
+  <Dimension name="Month">
+    <Hierarchy hasAll="true">
+    <View alias="FACT">
+        <SQL dialect="generic">
+         <![CDATA[SELECT TERRITORY AS region, ORDERDATE AS month, QUANTITYORDERED AS units, TOTALPRICE AS revenue FROM ORDERFACT]]>
+        </SQL>
+    </View>
+      <Level name="month" uniqueMembers="false" column="month" type="Date">
+      </Level>
+    </Hierarchy>
+  </Dimension>
+  <Cube name="Regional sales">
+    <View alias="FACT">
+        <SQL dialect="generic">
+         <![CDATA[SELECT TERRITORY AS region, ORDERDATE AS month, QUANTITYORDERED AS units, TOTALPRICE AS revenue FROM ORDERFACT]]>
+        </SQL>
+    </View>
+    <DimensionUsage name="Region" source="Region"/>
+    <DimensionUsage name="Month" source="Month"/>
+    <Measure name="Units" column="units" aggregator="sum"/>
+    <Measure name="Revenue" column="revenue" aggregator="sum" formatString="#,##0.00"/>
+    <Measure name="Average order" column="revenue" aggregator="avg"/>
+  </Cube>
+</Schema>

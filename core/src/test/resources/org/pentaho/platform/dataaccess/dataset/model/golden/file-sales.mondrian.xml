@@ -1,0 +1,24 @@
+<Schema name="Regional sales">
+  <Dimension name="Region">
+    <Hierarchy hasAll="true">
+      <Table name="DS_REGIONAL_SALES_ABC"/>
+      <Level name="region" uniqueMembers="false" column="REGION" type="String">
+      </Level>
+    </Hierarchy>
+  </Dimension>
+  <Dimension name="Month">
+    <Hierarchy hasAll="true">
+      <Table name="DS_REGIONAL_SALES_ABC"/>
+      <Level name="month" uniqueMembers="false" column="MONTH" type="Date">
+      </Level>
+    </Hierarchy>
+  </Dimension>
+  <Cube name="Regional sales">
+    <Table name="DS_REGIONAL_SALES_ABC"/>
+    <DimensionUsage name="Region" source="Region"/>
+    <DimensionUsage name="Month" source="Month"/>
+    <Measure name="Units" column="UNITS" aggregator="sum"/>
+    <Measure name="Revenue" column="REVENUE" aggregator="sum" formatString="#,##0.00"/>
+    <Measure name="Average order" column="REVENUE" aggregator="avg"/>
+  </Cube>
+</Schema>

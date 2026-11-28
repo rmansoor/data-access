@@ -75,7 +75,10 @@ public class DatasetsResource {
     this.service = service;
   }
 
-  /** {@code {"datasets": [{id, name, description, owner, sourceType, version, updated}]}}, by name. */
+  /**
+   * {@code {"datasets": [{id, name, description, owner, sourceType, version, updated, published?}]}}, by name;
+   * {@code published} ({domainId, catalogName}) once the dataset has been published.
+   */
   @GET
   public Response list() {
     return handle( () -> {
@@ -93,6 +96,10 @@ public class DatasetsResource {
         }
         item.put( "version", s.getVersion() );
         item.put( "updated", s.getUpdated().toString() );
+        if ( org.pentaho.platform.dataaccess.dataset.model.PublishedIds.assigned( d ) ) {
+          item.putObject( "published" ).put( "domainId", d.getLegacy().getDomainId() )
+            .put( "catalogName", d.getLegacy().getCatalogName() );
+        }
       }
       return Response.ok( mapper.writeValueAsString( body ) ).build();
     } );
@@ -250,14 +257,38 @@ public class DatasetsResource {
       .type( MediaType.APPLICATION_JSON ).build() );
   }
 
-  /** Publishing generates the metadata and Mondrian files (CWBA-63). */
+  /**
+   * Publishes the dataset for reporting: its metadata domain (Interactive Reports, Report Designer) and,
+   * when its model has measures, its Mondrian catalog (Analyzer). Requires If-Match with the version last
+   * read; the ETag is the version afterwards, which is new on the first publish (the ids are fixed then).
+   * Body: {@code {"domainId", "modelId", "catalogName", "analysis", "warnings": […]}}.
+   */
   @POST
   @Path( "{id}/publish" )
-  public Response publish( @PathParam( "id" ) String id ) {
+  public Response publish( @PathParam( "id" ) String id, @HeaderParam( HttpHeaders.IF_MATCH ) String ifMatch ) {
     return handle( () -> {
-      service.get().get( id );
-      throw new DatasetApiException( Code.NOT_IMPLEMENTED, "Publishing arrives with the generators (CWBA-63)" );
+      DatasetService s = service.get();
+      DatasetService.Published p = s.publish( id, expected( s, id, ifMatch ) );
+      java.util.Map<String, Object> body = new java.util.LinkedHashMap<>();
+      body.put( "domainId", p.getIds().getDomainId() );
+      body.put( "modelId", p.getIds().getModelId() );
+      body.put( "catalogName", p.getIds().getCatalogName() );
+      body.put( "analysis", p.isAnalysis() );
+      body.put( "warnings", p.getWarnings() );
+      return Response.ok( mapper.writeValueAsString( body ) ).tag( etag( p.getDataset() ) ).type( MediaType.APPLICATION_JSON )
+        .build();
     } );
+  }
+
+  /**
+   * The Agile BI modeler's suggested model for the dataset's kept columns ({@code {"dimensions", "measures"}},
+   * as {@code model} in the definition); nothing is stored.
+   */
+  @GET
+  @Path( "{id}/model/suggestion" )
+  public Response suggestModel( @PathParam( "id" ) String id ) {
+    return handle( () -> Response.ok( mapper.writeValueAsString( service.get().suggestModel( id ) ) )
+      .type( MediaType.APPLICATION_JSON ).build() );
   }
 
   // ------------------------------------------------------------------------------------------------
