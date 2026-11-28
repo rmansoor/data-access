@@ -42,7 +42,7 @@ public class DatasetFiles implements FileLocator {
 
   private static final Log LOG = LogFactory.getLog( DatasetFiles.class );
   /** What {@code source.file.path} holds for an uploaded file. */
-  static final Pattern STORED = Pattern.compile( "([a-z0-9][a-z0-9-]{0,59})/([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})\\.(csv|txt|xlsx)" );
+  static final Pattern STORED = Pattern.compile( "([a-z0-9][a-z0-9-]{0,59})/([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})\\.(csv|txt|xlsx|parquet)" );
   private static final int SNIFF_BYTES = 8192;
 
   private final Supplier<Path> root;
@@ -74,7 +74,7 @@ public class DatasetFiles implements FileLocator {
       boolean oldExcel = originalName != null && originalName.toLowerCase( java.util.Locale.ROOT ).trim().endsWith( ".xls" );
       throw new DatasetApiException( Code.UNSUPPORTED_FILE, "file", oldExcel
         ? "\"" + originalName + "\" is an old-style Excel file (.xls): save it as an Excel Workbook (.xlsx) and upload that"
-        : "Only CSV files (.csv or .txt) and Excel workbooks (.xlsx) can be uploaded"
+        : "Only CSV files (.csv or .txt), Excel workbooks (.xlsx) and Parquet files (.parquet) can be uploaded"
           + ( originalName == null ? "" : ", not \"" + originalName + "\"" ), null, null );
     }
     String name = datasetId + "/" + UUID.randomUUID() + "." + ext;
@@ -90,9 +90,11 @@ public class DatasetFiles implements FileLocator {
       if ( size == 0 ) {
         throw new DatasetApiException( Code.UNSUPPORTED_FILE, "file", "The file is empty", null, null );
       }
-      if ( "xlsx".equals( ext ) ? !looksLikeZip( temp ) : !looksLikeText( temp ) ) {
-        throw new DatasetApiException( Code.UNSUPPORTED_FILE, "file", "xlsx".equals( ext )
-          ? "The file isn't an Excel workbook (.xlsx)" : "The file isn't text, so it can't be read as CSV", null, null );
+      boolean fits = "xlsx".equals( ext ) ? looksLikeZip( temp ) : "parquet".equals( ext ) ? looksLikeParquet( temp )
+        : looksLikeText( temp );
+      if ( !fits ) {
+        throw new DatasetApiException( Code.UNSUPPORTED_FILE, "file", "xlsx".equals( ext ) ? "The file isn't an Excel workbook (.xlsx)"
+          : "parquet".equals( ext ) ? "The file isn't a Parquet file" : "The file isn't text, so it can't be read as CSV", null, null );
       }
       Files.move( temp, root.get().resolve( name ), StandardCopyOption.ATOMIC_MOVE );
       temp = null;
@@ -172,6 +174,15 @@ public class DatasetFiles implements FileLocator {
     return total;
   }
 
+  /** A Parquet file starts (and ends) with "PAR1". */
+  static boolean looksLikeParquet( Path file ) throws IOException {
+    byte[] head;
+    try ( InputStream in = Files.newInputStream( file ) ) {
+      head = in.readNBytes( 4 );
+    }
+    return new String( head, java.nio.charset.StandardCharsets.US_ASCII ).equals( "PAR1" );
+  }
+
   /** An Office Open XML file (.xlsx) is a zip archive: it starts with the zip signature. */
   static boolean looksLikeZip( Path file ) throws IOException {
     byte[] head;
@@ -212,6 +223,9 @@ public class DatasetFiles implements FileLocator {
     }
     if ( n.endsWith( ".xlsx" ) ) {
       return "xlsx";
+    }
+    if ( n.endsWith( ".parquet" ) ) {
+      return "parquet";
     }
     return n.contains( "." ) ? null : "csv";
   }

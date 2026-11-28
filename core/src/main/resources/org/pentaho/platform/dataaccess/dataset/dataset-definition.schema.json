@@ -43,7 +43,7 @@
       "additionalProperties": false,
       "required": ["format", "path"],
       "properties": {
-        "format": { "enum": ["CSV", "XLSX"] },
+        "format": { "enum": ["CSV", "XLSX", "PARQUET"] },
         "path": { "type": "string", "minLength": 1 },
         "originalName": { "type": "string" },
         "encoding": { "type": "string" },

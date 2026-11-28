@@ -149,7 +149,7 @@ public class DatasetDefinition {
 
   public enum SourceType { TABLES, SQL, FILE }
 
-  public enum FileFormat { CSV, XLSX }
+  public enum FileFormat { CSV, XLSX, PARQUET }
 
   /** Where the rows come from: database tables, a SQL query, or a file staged into a table. */
   @JsonInclude( JsonInclude.Include.NON_DEFAULT )

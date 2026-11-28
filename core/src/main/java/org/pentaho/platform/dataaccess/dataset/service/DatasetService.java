@@ -324,7 +324,7 @@ public class DatasetService {
     file.setOriginalName( displayName( originalName ) );
     // The format follows the file: a workbook's sheet and start row stay while it is a workbook (a newer copy).
     DatasetDefinition.FileFormat format = stored.endsWith( ".xlsx" ) ? DatasetDefinition.FileFormat.XLSX
-      : DatasetDefinition.FileFormat.CSV;
+      : stored.endsWith( ".parquet" ) ? DatasetDefinition.FileFormat.PARQUET : DatasetDefinition.FileFormat.CSV;
     if ( file.getFormat() != format ) {
       file.setSheet( null );
       file.setStartRow( 0 );
